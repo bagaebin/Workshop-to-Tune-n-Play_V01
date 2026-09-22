@@ -11,6 +11,7 @@ Sound by Scratch 워크숍 **후반부(digital probe 세션)**에서 쓰는 한 
 | 단계 | **1~4단계 구현 완료 · 데스크톱 검증 통과** (2026-09-22). 남은 것 — iPad 실기기 확인 · T11 재료 실물 · 09.26 자가 파일럿([절차](docs/acceptance/pilot-protocol.md)) |
 | 정본 | [SPEC.md](SPEC.md) — 볼트의 *Probe 개발 명세* 복사본 |
 | 대상 기기 | iPad Pro 12.9형 5세대 · iPadOS 26.8 · Safari standalone · 1366 × 1024 |
+| 배포 | GitHub Pages — <https://bagaebin.github.io/Workshop-to-Tune-n-Play_V01/> (main push 시 `.github/workflows/pages.yml`이 빌드·배포) |
 | 스택 | Canvas 2D + Web Audio + Pointer Events · TypeScript · Vite · 외부 라이브러리 0 |
 | 일정 | 제작 09.22–26 · 자가 파일럿 09.26 · 예비심사 09.28 · 본 세션 09.29– |
 

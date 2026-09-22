@@ -18,7 +18,7 @@
 
 ## 열린 항목
 
-- [ ] GitHub Pages 저장소·경로 확정 (base path → `vite.config.ts`)
+- [x] GitHub Pages — `bagaebin/Workshop-to-Tune-n-Play_V01` 공개 저장소 · `base './'` 그대로 동작 · 09.23 배포 확인 (`.github/workflows/pages.yml`)
 - [ ] standalone에서 마이크 권한이 Safari와 별도로 저장되는지 실기기 확인 (V0.3 §12-1 #3)
 - [ ] `navigator.share({ files })`가 standalone Safari에서 파일 앱으로 저장되는지 실기기 확인
 - [x] 빌드 시 git short hash를 헤더 `build`에 넣는 방법 (Vite `define`) — 09.22. 단, 폴더가 아직 git 저장소가 아니라 `nogit`

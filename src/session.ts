@@ -1134,6 +1134,7 @@ function frame(): void {
     imageSizeCut: cut('image_size'),
     labelsCut: cut('text_label'),
     review,
+    build: sess.build,
   }
   draw(ctx2d, fit, view)
   requestAnimationFrame(frame)

@@ -67,6 +67,8 @@ export interface View {
   imageSizeCut: boolean
   labelsCut: boolean
   review: ReviewOverlay | null
+  /** 준비 화면(seg −1)에만 작게 — 진행자가 빌드를 확인한다 */
+  build: string
 }
 
 const C = {
@@ -112,7 +114,15 @@ export function draw(ctx: CanvasRenderingContext2D, fit: Fit, v: View): void {
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, W, H)
 
-  if (v.seg < 0) return // 준비 — 검은 화면
+  if (v.seg < 0) {
+    // 준비 — 검은 화면. 오른쪽 아래에 빌드 식별자만 희미하게 (참여자가 보는 화면이 아니다)
+    ctx.font = '14px -apple-system, "Apple SD Gothic Neo", sans-serif'
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'bottom'
+    ctx.fillStyle = 'rgba(255,255,255,0.28)'
+    ctx.fillText(v.build, W - 16, H - 12)
+    return
+  }
 
   if (v.uiAlpha > 0) {
     ctx.globalAlpha = v.uiAlpha

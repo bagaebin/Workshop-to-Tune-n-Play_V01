@@ -62,8 +62,12 @@ export interface Hooks {
   onFacilitatorTaps(): void
 }
 
-/** 진행자 5연타 인정 범위 — 화면(CSS px) 기준 왼쪽 위 모서리. 레터박스·상태 표시줄 때문에 가상 (0,0)이 물리 모서리와 어긋나도 잡히게 (R-008) */
-const FAC_SCREEN_PX = 60
+/** 진행자 모서리 — 화면(CSS px) 기준 왼쪽 위. 레터박스·상태 표시줄 때문에 가상 (0,0)이 물리 모서리와 어긋나도 잡히게 (R-008) */
+const FAC_SCREEN_PX = 80
+/** 5연타 창 — 실기기에서는 FAC_WINDOW(1.5 s)보다 넉넉히. 참여자 화면에는 영향 없는 진행자 전용 값 (R-008) */
+const FAC_WINDOW_TOUCH = 3000
+/** 대안 — 모서리를 3 s 길게 누르기. 연타 타이밍·가장자리 제스처 지연과 무관 (R-008) */
+const FAC_HOLD_MS = 3000
 
 interface P {
   id: number
@@ -88,6 +92,15 @@ export function attach(el: HTMLElement, h: Hooks): void {
   const ps = new Map<number, P>()
   let primary: number | null = null
   const facTaps: number[] = []
+  let holdTimer: number | null = null
+
+  const inCorner = (p: P): boolean => inFacRect(p.x0, p.y0) || (p.cx0 <= FAC_SCREEN_PX && p.cy0 <= FAC_SCREEN_PX)
+  const clearHold = (): void => {
+    if (holdTimer !== null) {
+      clearTimeout(holdTimer)
+      holdTimer = null
+    }
+  }
 
   const r = (n: number) => Math.round(n)
   const touchFields = (e: PointerEvent, p: P, acted = p.acted) => ({
@@ -103,7 +116,11 @@ export function attach(el: HTMLElement, h: Hooks): void {
 
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault()
-    el.setPointerCapture(e.pointerId)
+    try {
+      el.setPointerCapture(e.pointerId)
+    } catch {
+      /* 합성 이벤트·이미 끝난 포인터 — 캡처 없이 진행 */
+    }
     const { x, y } = h.toVirtual(e.clientX, e.clientY)
     const isPrimary = primary === null
     if (isPrimary) primary = e.pointerId
@@ -114,6 +131,22 @@ export function attach(el: HTMLElement, h: Hooks): void {
     const p: P = { id: e.pointerId, x0: x, y0: y, cx0: e.clientX, cy0: e.clientY, t0: performance.now(), lx: x, ly: y, maxDist: 0, path: 0, target, acted, blocked, reason, lastMoveLog: 0 }
     ps.set(e.pointerId, p)
     if (h.logging()) log.log('touch.down', { ...touchFields(e, p), x: r(x), y: r(y) })
+    // 진행자 모서리 — 연타는 down에서 센다(지연 최소). 길게 누르기는 타이머로
+    if (inCorner(p)) {
+      const now = performance.now()
+      facTaps.push(now)
+      while (facTaps.length && now - (facTaps[0] as number) > Math.max(FAC_WINDOW, FAC_WINDOW_TOUCH)) facTaps.shift()
+      if (facTaps.length >= FAC_TAPS) {
+        facTaps.length = 0
+        h.onFacilitatorTaps()
+      }
+      clearHold()
+      holdTimer = window.setTimeout(() => {
+        holdTimer = null
+        const q = ps.get(e.pointerId)
+        if (q && q.maxDist < TAP_MOVE_PX * 3) h.onFacilitatorTaps()
+      }, FAC_HOLD_MS)
+    }
     h.onDown({ pointerId: e.pointerId, target, x, y, acted })
   })
 
@@ -147,18 +180,7 @@ export function attach(el: HTMLElement, h: Hooks): void {
     }
     ps.delete(e.pointerId)
     if (primary === e.pointerId) primary = null
-
-    // 진행자 시트 — 좌상단 5연타 (§7-1). 가상 (0,0)–(30,32) 또는 화면 왼쪽 위 60 px. 시도 자체는 target:none으로 남는다
-    const inCorner = inFacRect(p.x0, p.y0) || (p.cx0 <= FAC_SCREEN_PX && p.cy0 <= FAC_SCREEN_PX)
-    if (p.maxDist < TAP_MOVE_PX * 3 && inCorner) {
-      const now = performance.now()
-      facTaps.push(now)
-      while (facTaps.length && now - (facTaps[0] as number) > FAC_WINDOW) facTaps.shift()
-      if (facTaps.length >= FAC_TAPS) {
-        facTaps.length = 0
-        h.onFacilitatorTaps()
-      }
-    }
+    clearHold()
 
     if (cancelled || !acted) {
       if (p.acted) h.onCancel(e.pointerId)

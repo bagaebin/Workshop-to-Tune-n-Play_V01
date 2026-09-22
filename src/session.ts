@@ -161,7 +161,7 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
   attach(canvasEl, {
     toVirtual: (cx, cy) => toVirtual(fit, cx, cy),
     target: (x, y) => {
-      if (sess.seg === 0) return inFacRect(x, y) ? 'none' : 'surface' // 튜토리얼 — 어디를 닿아도 같다 (N4). 진행자 모서리만 예외
+      if (sess.seg === 0) return inFacRect(x, y) || fit.oy + y * fit.s <= 60 && fit.ox + x * fit.s <= 60 ? 'none' : 'surface' // 튜토리얼 — 어디를 닿아도 같다 (N4). 진행자 모서리만 예외
       return hitTest(x, y, {
         slots: sess.slots,
         notes: cur().notes,

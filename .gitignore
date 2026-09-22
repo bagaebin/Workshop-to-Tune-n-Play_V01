@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+# 세션 로그·녹음은 저장소에 넣지 않는다
+sessions/
+*.jsonl
+*.m4a
+*.webm
+!docs/log-schema/examples/*.jsonl

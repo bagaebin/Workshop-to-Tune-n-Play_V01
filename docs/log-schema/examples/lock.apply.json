@@ -1,0 +1,13 @@
+{
+  "type": "lock.apply", "t": 903120, "seq": 0, "seg": 2, "canvas": 3,
+  "state": { "mat": "blank", "grid": false, "gen": "hand" }, "target_mat": null,
+  "rule": "v0.3", "axis": "mat", "value": "blank",
+  "candidates": ["mat", "gen"],
+  "p":      { "mat": 0.51, "grid": 1.00, "gen": 0.93 },
+  "p_norm": { "mat": 0.27, "grid": 1.00, "gen": 0.90 },
+  "alt":    { "rule": "v0.2", "axis": "grid", "value": "off" },
+  "dwell":  { "mat":  { "blank": 210400, "sound": 98300, "image": 103200 },
+              "grid": { "off": 411900, "on": 0 },
+              "gen":  { "hand": 383100, "rule": 19800, "random": 9000 } },
+  "T_active": 411900
+}

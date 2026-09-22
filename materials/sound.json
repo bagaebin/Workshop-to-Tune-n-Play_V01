@@ -1,0 +1,10 @@
+{
+  "_comment": "더미 (SPEC §13). 09.25 저녁 실물 교체. on = 0부터 상대값 ms · pitch/vel/tone 0–1. 실물도 같은 형식.",
+  "vals": [
+    { "on": 0,    "pitch": 0.50, "len": 250, "vel": 0.5, "tone": 0.5 },
+    { "on": 500,  "pitch": 0.58, "len": 250, "vel": 0.5, "tone": 0.5 },
+    { "on": 1000, "pitch": 0.50, "len": 500, "vel": 0.5, "tone": 0.5 },
+    { "on": 1750, "pitch": 0.42, "len": 250, "vel": 0.5, "tone": 0.5 },
+    { "on": 2000, "pitch": 0.50, "len": 750, "vel": 0.5, "tone": 0.5 }
+  ]
+}

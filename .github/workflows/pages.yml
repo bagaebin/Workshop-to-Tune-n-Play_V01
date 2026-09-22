@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true # 저장소에 Pages가 아직 없으면 Actions 소스로 만든다
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run build

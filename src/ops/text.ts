@@ -56,6 +56,10 @@ interface Open {
   el: HTMLInputElement
   openedAt: number
   edits: number
+  /** 관측한 visual viewport 끌어올림 최댓값 (px) */
+  pan: number
+  /** 관측한 키보드 높이 최댓값 (px) */
+  kb: number
 }
 
 let open: Open | null = null
@@ -68,7 +72,14 @@ export function inputKind(): InputKind | null {
   return open?.kind ?? null
 }
 
-/** 입력 칸 — 1206 × 80, x = 160, visualViewport 기준 키보드 바로 위 (§3-4). 어느 상태에서도 열린다 */
+/** 입력 칸 — 1206 × 80, x = 160, visualViewport 기준 키보드 바로 위 (§3-4). 어느 상태에서도 열린다
+ *
+ * iPadOS는 입력에 포커스가 가면 입력이 보이도록 **화면 전체를 위로 끌어올린다**(visual viewport pan). 그러면 작업 면이
+ * 밀려 올라가 §3-4 "작업 면 좌표계 불변"이 깨진다(PI-001). 막는 법 셋 —
+ *   ① focus({preventScroll}) ② 입력 칸을 처음엔 작업 면 위쪽에 두어 끌어올릴 이유를 없애고, 키보드가 뜬 뒤 그 바로 위로 옮긴다
+ *   ③ 그래도 pan이 생기면 캔버스를 offsetTop만큼 되내려(transform) 보이는 자리를 지킨다. 터치 좌표는 캔버스의 실제 rect 기준(session)
+ * 열린 동안 관측한 pan · 키보드 높이의 최댓값을 text.commit/abort에 남긴다 — 실기기 로그로 수정이 먹었는지 본다.
+ */
 export function openInput(kind: InputKind, fit: Fit, onDone: (result: { committed: boolean; raw: string }) => void): void {
   if (open) return
   const el = document.createElement('input')
@@ -82,7 +93,7 @@ export function openInput(kind: InputKind, fit: Fit, onDone: (result: { committe
     'position:fixed;z-index:5;box-sizing:border-box;padding:0 20px;font:32px -apple-system,"Apple SD Gothic Neo",sans-serif;' +
     'background:#222;color:#eee;border:1px solid #555;border-radius:0;outline:none;caret-color:#eee;'
   document.body.appendChild(el)
-  open = { kind, el, openedAt: log.now(), edits: 0 }
+  open = { kind, el, openedAt: log.now(), edits: 0, pan: 0, kb: 0 }
   el.addEventListener('input', () => {
     if (open) open.edits++
   })
@@ -92,37 +103,64 @@ export function openInput(kind: InputKind, fit: Fit, onDone: (result: { committe
       closeInput(true, onDone)
     }
   })
-  layoutInput(fit)
-  window.visualViewport?.addEventListener('resize', reposition)
+  lastFit = fit
+  layoutInput(fit, true) // ② 처음엔 작업 면 위쪽
+  const vv = window.visualViewport
+  vv?.addEventListener('resize', reposition)
+  vv?.addEventListener('scroll', reposition)
   log.log('text.open', { source: kind })
-  el.focus()
+  try {
+    el.focus({ preventScroll: true }) // ①
+  } catch {
+    el.focus()
+  }
+  // 키보드가 올라오는 동안 몇 번 더 맞춘다 (resize 이벤트가 늦거나 빠지는 기기 대비)
+  for (const ms of [50, 250, 600]) window.setTimeout(reposition, ms)
   function reposition(): void {
-    layoutInput(fit)
+    layoutInput(fit, false)
   }
   ;(el as HTMLInputElement & { _reposition?: () => void })._reposition = reposition
 }
 
 let lastFit: Fit | null = null
-function layoutInput(fit: Fit): void {
+
+function stageEl(): HTMLElement | null {
+  return document.getElementById('stage')
+}
+
+function layoutInput(fit: Fit, initial: boolean): void {
   if (!open) return
   lastFit = fit
   const vv = window.visualViewport
   const h = 80 * fit.s
   const w = 1206 * fit.s
-  const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight
+  const offTop = vv ? vv.offsetTop : 0
+  const kb = vv ? Math.max(0, window.innerHeight - vv.height - offTop) : 0
+  const keyboardUp = vv ? vv.height < window.innerHeight * 0.85 : false
+  // ③ pan 보정 — 끌어올린 만큼 캔버스를 되내린다. 문서를 스크롤할 수 없게 해 둔 상태라 window.scrollTo는 보조
+  if (offTop > 0) window.scrollTo(0, 0)
+  const stage = stageEl()
+  if (stage) stage.style.transform = offTop > 0 ? `translateY(${offTop}px)` : ''
+  open.pan = Math.max(open.pan, Math.round(offTop))
+  open.kb = Math.max(open.kb, Math.round(kb))
   open.el.style.left = `${fit.ox + 160 * fit.s}px`
   open.el.style.width = `${w}px`
   open.el.style.height = `${h}px`
-  open.el.style.top = `${bottom - h}px`
   open.el.style.fontSize = `${32 * fit.s}px`
+  if (initial || !keyboardUp) {
+    open.el.style.top = `${offTop + fit.oy + 48 * fit.s}px` // 작업 면 위쪽 — 키보드가 덮지 않는 자리
+  } else {
+    open.el.style.top = `${offTop + (vv ? vv.height : window.innerHeight) - h}px` // 키보드 바로 위
+  }
 }
 
-/** 키보드·입력 칸에 가려진 화면 y(CSS px)의 시작. 열려 있지 않으면 null */
-export function coveredFromScreenY(): number | null {
-  if (!open || !lastFit) return null
+/** 키보드·입력 칸에 가려진 자리가 시작되는 client y (입력 칸의 윗변). 입력 칸이 아직 위쪽에 있으면 null */
+export function coveredFromClientY(): number | null {
+  if (!open) return null
+  const r = open.el.getBoundingClientRect()
   const vv = window.visualViewport
-  const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight
-  return bottom - 80 * lastFit.s
+  const keyboardUp = vv ? vv.height < window.innerHeight * 0.85 : false
+  return keyboardUp ? r.top : null
 }
 
 /** 바깥 탭 = 확정. 내용이 비었거나 TEXT_ABORT_CHARS 이하면 text.abort */
@@ -134,10 +172,18 @@ export function closeInput(committed: boolean, onDone: (result: { committed: boo
   const chars = [...raw].length
   const dur = log.now() - o.openedAt
   const rep = (o.el as HTMLInputElement & { _reposition?: () => void })._reposition
-  if (rep) window.visualViewport?.removeEventListener('resize', rep)
+  if (rep) {
+    window.visualViewport?.removeEventListener('resize', rep)
+    window.visualViewport?.removeEventListener('scroll', rep)
+  }
+  o.el.blur()
   o.el.remove()
+  const stage = stageEl()
+  if (stage) stage.style.transform = ''
+  window.scrollTo(0, 0)
   const aborted = !committed || chars <= TEXT_ABORT_CHARS
-  log.log(aborted ? 'text.abort' : 'text.commit', { source: o.kind, raw, chars, edits: o.edits, dur })
+  // pan · kb — 열린 동안 관측한 visual viewport 끌어올림 · 키보드 높이의 최댓값 (px). pan이 0이 아니면 보정이 동작한 것
+  log.log(aborted ? 'text.abort' : 'text.commit', { source: o.kind, raw, chars, edits: o.edits, dur, pan: o.pan, kb: o.kb })
   onDone({ committed: !aborted, raw })
 }
 

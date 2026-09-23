@@ -304,26 +304,47 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
 
 
 def dwell_from_log(header: dict | None, events: list[dict]) -> tuple[dict, int, list[int]]:
-    """§10-5 체류 재계산 — 활동(터치) 사이 Δ ≤ τ를 그때의 state에 더한다. 구간 1만. 반환 (dwell, T_active, idle 목록)"""
+    """§10-5 체류 재계산 — 앱(log.ts account · spanOpen/Close)과 같은 규칙. 구간 1만. 반환 (dwell, T_active, idle 목록)
+
+    활동 = touch.* · seg.end(구간 끝에서 마지막 간격을 닫는다)
+    열린 구간(play.start→stop · text.open→commit|abort) 안의 간격은 τ와 무관하게 체류 (⑰)
+    구간이 열릴 때 기준점만 옮기고, 닫힐 때 그때까지를 체류로 더한다
+    mic.span은 시작 이벤트가 없어 재현하지 않는다 — 마이크 세션에서는 idle 대조가 어긋날 수 있다
+    """
     tau = int(header.get("tau_ms", 10000)) if header else 10000
     dwell = {"mat": defaultdict(int), "grid": defaultdict(int), "gen": defaultdict(int)}
     last_t = None
     last_state = None
     last_seg = None
+    open_spans: set = set()
     idles: list[int] = []
+
+    def credit(gap: int) -> None:
+        dwell["mat"][last_state.get("mat")] += gap
+        dwell["grid"]["on" if last_state.get("grid") else "off"] += gap
+        dwell["gen"][last_state.get("gen")] += gap
+
     for e in events:
         typ = e.get("type", "")
         st = e.get("state")
+        t = e.get("t", 0)
         if typ == "seg.start":
-            last_t = e.get("t", 0)  # 구간 시작이 기준점
-        if typ.startswith("touch.") or typ == "seg.end":
-            t = e.get("t", 0)
+            last_t = t  # 구간 시작이 기준점
+        elif typ in ("play.start", "text.open"):
+            open_spans.add(typ.split(".")[0])
+            last_t = t
+        elif typ in ("play.stop", "text.commit", "text.abort"):
+            kind = typ.split(".")[0]
+            if kind in open_spans:
+                open_spans.discard(kind)
+                if last_t is not None and last_state is not None and last_seg == 1:
+                    credit(t - last_t)
+                last_t = t
+        elif typ.startswith("touch.") or typ == "seg.end":
             if last_t is not None and last_state is not None and last_seg == 1:
                 gap = t - last_t
-                if gap <= tau:
-                    dwell["mat"][last_state.get("mat")] += gap
-                    dwell["grid"]["on" if last_state.get("grid") else "off"] += gap
-                    dwell["gen"][last_state.get("gen")] += gap
+                if open_spans or gap <= tau:
+                    credit(gap)
                 else:
                     idles.append(gap)
             last_t = t
@@ -465,17 +486,21 @@ def pilot(header: dict | None, events: list[dict]) -> str:
     if s1 and downs1:
         L.append(f"[첫 정지] seg.start 1 → 첫 touch.down {downs1[0].get('t', 0) - t1} ms")
 
-    # SLOT · 간격 — 슬롯 옆 24 px 안에서 빗나간 접촉(target none)
+    # SLOT · 간격 — 슬롯 옆 24 px 안에서 빗나간 접촉(target none). 진행자 모서리(왼쪽 위 80 px) 탭은 뺀다
     near = 0
+    corner = 0
     for e in events:
         if e.get("type") != "touch.down" or e.get("target") != "none":
             continue
         x, y = e.get("x", -999), e.get("y", -999)
+        if x < 80 and y < 80:
+            corner += 1
+            continue
         for _, sx, sy in slot_rects(header):
             if sx - 24 <= x <= sx + SLOT + 24 and sy - 24 <= y <= sy + SLOT + 24:
                 near += 1
                 break
-    L.append(f"[SLOT 100 · 간격 24] 슬롯 24 px 이내 빗나간 접촉(none) {near}건 · 전체 none {sum(1 for e in events if e.get('type') == 'touch.down' and e.get('target') == 'none')}건")
+    L.append(f"[SLOT 100 · 간격 24] 슬롯 24 px 이내 빗나간 접촉(none) {near}건 · 진행자 모서리 탭 {corner}건(제외) · 전체 none {sum(1 for e in events if e.get('type') == 'touch.down' and e.get('target') == 'none')}건")
 
     # LEN_DEFAULT — 탭 · 누르기 · 끌기 길이
     touch_adds = [a for a in events if a.get("type") == "note.add" and a.get("src") == "touch"]
@@ -505,7 +530,7 @@ def pilot(header: dict | None, events: list[dict]) -> str:
 
     # D1 전환 기준 — 적기 시간
     commits = [e for e in events if e.get("type") in ("text.commit", "text.abort")]
-    L.append(f"[D1 15 s · 절반] 적기 {len(commits)}회 — " + (" · ".join(f"{e.get('chars')}자 {e.get('dur')} ms" for e in commits) if commits else "없음"))
+    L.append(f"[D1 15 s · 절반] 적기 {len(commits)}회 — " + (" · ".join(f"{e.get('chars')}자 {e.get('dur')} ms" + (f" (pan {e.get('pan')} · 키보드 {e.get('kb')} px)" if 'pan' in e else "") for e in commits) if commits else "없음"))
 
     # 발견 여부 — 시작점 탭 · 반복 청취 · 칩 놓기 · 지우기 · 이미지 손잡이 · 되돌아가기
     seeks = sum(1 for e in events if e.get("type") == "play.seek")

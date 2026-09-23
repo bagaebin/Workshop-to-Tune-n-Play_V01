@@ -159,7 +159,11 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
   void material.preload()
 
   attach(canvasEl, {
-    toVirtual: (cx, cy) => toVirtual(fit, cx, cy),
+    toVirtual: (cx, cy) => {
+      // 캔버스의 실제 자리 기준 — 키보드 pan 보정(transform)이 걸려 있어도 맞는다 (PI-001)
+      const r = canvasEl.getBoundingClientRect()
+      return toVirtual(fit, cx - r.left, cy - r.top)
+    },
     target: (x, y) => {
       if (sess.seg === 0) return inFacRect(x, y) || fit.oy + y * fit.s <= 60 && fit.ox + x * fit.s <= 60 ? 'none' : 'surface' // 튜토리얼 — 어디를 닿아도 같다 (N4). 진행자 모서리만 예외
       return hitTest(x, y, {
@@ -188,8 +192,10 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
     blocked: (x, y) => {
       if (sess.seg < 1) return false
       if (panelOpen && panelBlocks(sess.slots.panel, x, y)) return true
-      const covered = text.coveredFromScreenY()
-      return covered !== null && fit.oy + y * fit.s >= covered // 키보드 · 입력 칸에 가려진 자리 (§3-4)
+      const covered = text.coveredFromClientY()
+      if (covered === null) return false
+      const clientY = canvasEl.getBoundingClientRect().top + fit.oy + y * fit.s
+      return clientY >= covered // 키보드 · 입력 칸에 가려진 자리 (§3-4)
     },
     logging: () => sess.seg >= 0,
     onDown,
@@ -1148,6 +1154,11 @@ function deviceName(ua: string): string {
 }
 
 function osName(ua: string): string {
+  // iPadOS Safari는 데스크톱 UA(Macintosh · Mac OS X 10_15_7 고정)를 보낸다 — OS 버전은 알 수 없고 Safari 버전만 남긴다
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) {
+    const v = /Version\/(\d+(?:\.\d+)?)/.exec(ua)
+    return `iPadOS (Safari ${v ? v[1] : '?'})`
+  }
   const m = /OS (\d+)[_.](\d+)/.exec(ua)
   if (m && /iPad|iPhone/.test(ua)) return `iPadOS ${m[1]}.${m[2]}`
   const mac = /Mac OS X (\d+)[_.](\d+)/.exec(ua)

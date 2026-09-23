@@ -38,6 +38,7 @@ sw.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   if (url.origin !== sw.location.origin) return
+  if (url.pathname.endsWith('/version.json')) return // 새 빌드 확인용 — 언제나 네트워크 (R-009)
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE)

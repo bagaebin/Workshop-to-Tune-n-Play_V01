@@ -38,7 +38,10 @@ void session.tryResume().catch((e) => console.warn('resume 실패', e))
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(new URL('sw.js', document.baseURI).href).catch((e) => console.warn('SW 등록 실패', e))
+    navigator.serviceWorker
+      .register(new URL('sw.js', document.baseURI).href)
+      .then((reg) => reg.update()) // 로드마다 새 sw.js가 있는지 본다 — 있으면 뒤에서 받아 두고 다음 실행에 쓰인다
+      .catch((e) => console.warn('SW 등록 실패', e))
   })
 }
 

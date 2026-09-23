@@ -7,7 +7,7 @@
 
 - [ ] `materials/sound.json` · `materials/img/i1..i5.png` 실물로 교체(T11) → `npm run build`. 못 했으면 더미로 진행하고 T11을 `pilot-calibration.md`에 적는다
 - [ ] 절단 판정 — 09.22 기준 **자른 것 없음**(`CUTS = []`). 파일럿에서 마이크 입력 채널이 헛노트를 내거나 게이트가 재생을 막으면 `src/constants.ts`의 `CUTS`에 `'mic_input'`을 넣고 다시 빌드한다. 다른 후보(이미지 크기 · 미리보기 루프 · 슬라이더 · 라벨)는 같은 방법
-- [ ] 배포 — main에 push하면 GitHub Pages에 올라간다: <https://bagaebin.github.io/Workshop-to-Tune-n-Play_V01/> (Actions 탭에서 `pages` 성공 확인). iPad Safari에서 열어 **홈 화면에 추가**. 한 번 띄워 서비스 워커 캐시를 굳힌다. 이후 기내 모드에서 다시 떠야 한다. 헤더 `build`의 해시가 마지막 커밋과 같은지 확인
+- [ ] 배포 — main에 push하면 GitHub Pages에 올라간다: <https://bagaebin.github.io/Workshop-to-Tune-n-Play_V01/> (Actions 탭에서 `pages` 성공 확인). iPad Safari에서 열어 **홈 화면에 추가**. 한 번 띄워 서비스 워커 캐시를 굳힌다. 이후 기내 모드에서 다시 떠야 한다. 헤더 `build`의 해시가 마지막 커밋과 같은지 확인 — 다르면 시트 준비 화면의 **[새 빌드 확인]**
 - [ ] 마이크 — standalone 앱에서 시트 [마이크 권한 요청]을 한 번 허용해 둔다(N1). iPadOS 설정 › Safari › 마이크 허용 확인
 
 ## 1. 회차마다 (약 30분)

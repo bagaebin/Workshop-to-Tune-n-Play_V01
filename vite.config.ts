@@ -50,7 +50,9 @@ function swPrecache(): Plugin {
     name: 'probe-sw-precache',
     apply: 'build',
     generateBundle(_opts, bundle) {
-      const files = Object.keys(bundle).filter((f) => f !== 'sw.js')
+      // version.json — 진행자 시트의 「새 빌드 확인」이 읽는다. 서비스 워커가 캐시하지 않는다 (R-009)
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD }) })
+      const files = Object.keys(bundle).filter((f) => f !== 'sw.js' && f !== 'version.json')
       const list = ['./', 'index.html', ...files, ...PUBLIC_FILES]
       const sw = bundle['sw.js']
       if (sw && sw.type === 'chunk') {

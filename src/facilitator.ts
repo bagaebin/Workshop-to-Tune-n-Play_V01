@@ -9,6 +9,7 @@ import type { Checks, Status, ReviewData, ReviewMark } from './session'
 import type { ExportResult } from './log'
 import type { LockRule } from './lock'
 import * as mic from './mic'
+import * as update from './update'
 
 export interface FacApi {
   status(): Status
@@ -38,6 +39,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
   let timer: number | null = null
   let lastExport: ExportResult | null = null
   let micMsg = ''
+  let updateMsg = ''
   let statusEl: HTMLElement | null = null
   let meterEl: HTMLElement | null = null
   let meterThrEl: HTMLElement | null = null
@@ -193,6 +195,25 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
         lockRule = v ? 'v0.2' : 'v0.3'
       }))
       panel.append(p(`vel_source: fixed · tone_source: fixed · audio_mime: ${mic.hasPermission() ? mic.mimeType() || '—' : '—'}`))
+      panel.append(h('빌드'))
+      panel.append(p(`지금 빌드 ${update.CURRENT}`))
+      panel.append(button('새 빌드 확인 (Wi-Fi 필요)', async () => {
+        updateMsg = '확인 중…'
+        render()
+        const r = await update.check()
+        if (!r.ok) {
+          updateMsg = `확인 못 함 — 오프라인이거나 서버 오류 (${r.error}). 아무것도 바꾸지 않았다`
+          return
+        }
+        if (!r.newer) {
+          updateMsg = `최신이다 — 서버도 ${r.remote}`
+          return
+        }
+        updateMsg = `새 빌드 ${r.remote} — 받는 중. 화면이 다시 뜬다`
+        render()
+        await update.reloadFresh()
+      }))
+      if (updateMsg) panel.append(p(updateMsg))
       const startBtn = button('시작 → 플래시 → 튜토리얼', async () => {
         await api.start(pid, { guided_access: checks.guided_access ?? false, silent_mode_off: checks.silent_mode_off ?? false, lock_rule: lockRule })
         close()

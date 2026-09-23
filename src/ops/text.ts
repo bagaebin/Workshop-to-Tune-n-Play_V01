@@ -109,6 +109,7 @@ export function openInput(kind: InputKind, fit: Fit, onDone: (result: { committe
   vv?.addEventListener('resize', reposition)
   vv?.addEventListener('scroll', reposition)
   log.log('text.open', { source: kind })
+  log.spanOpen('text') // 적는 동안은 정지가 아니다 (⑰ · PI-005)
   try {
     el.focus({ preventScroll: true }) // ①
   } catch {
@@ -181,6 +182,7 @@ export function closeInput(committed: boolean, onDone: (result: { committed: boo
   const stage = stageEl()
   if (stage) stage.style.transform = ''
   window.scrollTo(0, 0)
+  log.spanClose('text')
   const aborted = !committed || chars <= TEXT_ABORT_CHARS
   // pan · kb — 열린 동안 관측한 visual viewport 끌어올림 · 키보드 높이의 최댓값 (px). pan이 0이 아니면 보정이 동작한 것
   log.log(aborted ? 'text.abort' : 'text.commit', { source: o.kind, raw, chars, edits: o.edits, dur, pan: o.pan, kb: o.kb })

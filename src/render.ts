@@ -82,8 +82,9 @@ const C = {
   slotLine: '#3a3a3a',
   slotLineActive: '#8a8a8a',
   label: '#c8c8c8',
-  note: '#d9d9d9',
+  note: '#a8a8a8',
   noteSel: '#ffffff',
+  noteSelRing: 'rgba(255,255,255,0.9)',
   circle: '#dcdcdc',
   gridMinor: 'rgba(255,255,255,0.05)',
   gridMajor: 'rgba(255,255,255,0.12)',
@@ -225,7 +226,17 @@ function drawImages(ctx: CanvasRenderingContext2D, images: readonly Image[], v: 
 function drawNotes(ctx: CanvasRenderingContext2D, notes: readonly Note[], v: View): void {
   ctx.save()
   clipSurface(ctx)
-  for (const n of notes) fillRect(ctx, noteRect(n, v.grid), v.selection.has(n.id) ? C.noteSel : C.note)
+  // 선택은 밝기 차이만으로는 안 보인다(PI-007) — 선택된 노트는 흰색 + 테두리, 나머지는 한 단계 어둡게
+  for (const n of notes) {
+    const r = noteRect(n, v.grid)
+    const sel = v.selection.has(n.id)
+    fillRect(ctx, r, sel ? C.noteSel : C.note)
+    if (sel) {
+      ctx.strokeStyle = C.noteSelRing
+      ctx.lineWidth = 2
+      ctx.strokeRect(r.x - 3, r.y - 3, r.w + 6, r.h + 6)
+    }
+  }
   ctx.restore()
 }
 

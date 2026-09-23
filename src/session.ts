@@ -11,7 +11,7 @@ import {
   W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG1_APPEAR, SEG1_CAP, SEG2_LEN, FADE_IN, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR,
 } from './constants'
 import {
-  computeFit, toVirtual, shuffledSlots, hitTest, pitchOfY, inFacRect, inRect, panelBlocks, sliderValue, slotRects,
+  computeFit, toVirtual, shuffledSlots, hitTest, pitchOfY, inFacRect, inRect, panelBlocks, sliderValue, slotRects, resolveLabels,
   SURFACE, AXIS, PANEL, BOTTOM_RIGHT, quantPitch, type Fit,
 } from './layout'
 import {
@@ -133,6 +133,7 @@ const held = new Map<number, { h: audio.Handle; at: number }>()
 const drags = new Map<number, notes.Edit>()
 const imageDrags = new Map<number, imageOps.ImageEdit>()
 const sliderDrags = new Map<number, { name: 'step' | 'spread'; prev: number }>()
+const closedInput = new Set<number>()
 let openSheet: () => void = () => {}
 
 const cur = (): Canvas => sess.canvases[sess.current] as Canvas
@@ -177,7 +178,7 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
         images: cur().images,
         list: canvasOps.listOrder,
         chips: sess.chips,
-        labels: cur().labels,
+        labels: resolveLabels(cur().labels, cur().notes, sess.state.grid),
         sliderVisible: !cut('rule_slider') && (sess.state.gen === 'rule' || sess.state.gen === 'random'),
         imageSizeCut: cut('image_size'),
       })
@@ -794,7 +795,11 @@ function ghostFor(target: string, x: number, y: number): Ghost | null {
 
 function onDown(d: DownInfo): void {
   // 입력 칸이 열려 있으면 바깥 접촉 = 확정 (§6-7). 패널 밖 접촉 = 닫힘 (§3-3). 그 접촉 자체는 평소대로 동작한다
-  if (text.isOpen()) text.closeInput(true, onTextDone)
+  closedInput.delete(d.pointerId) // 포인터 id는 재사용된다 — 지난 접촉의 흔적을 지운다
+  if (text.isOpen()) {
+    text.closeInput(true, onTextDone)
+    closedInput.add(d.pointerId) // 이 접촉은 입력 칸을 닫는 데 쓰였다 — 빈 면 슬롯·칩이어도 다시 열지 않는다 (PI-004)
+  }
   if (panelOpen && !inRect(PANEL, d.x, d.y) && d.target !== 'slot:mat.image') panelOpen = false
   if (!d.acted) return
   void audio.resume() // 첫 접촉이 AudioContext.resume()을 겸한다 (§7 · N1)
@@ -865,6 +870,7 @@ function releaseHeld(pointerId: number, minLenMs = 0): void {
 }
 
 function onCancel(pointerId: number): void {
+  closedInput.delete(pointerId)
   releaseHeld(pointerId)
   ghost = null
   const cv = cur()
@@ -903,6 +909,14 @@ function afterAdopt(): void {
 }
 
 function onGesture(g: Gesture): void {
+  try {
+    handleGesture(g)
+  } finally {
+    closedInput.delete(g.pointerId)
+  }
+}
+
+function handleGesture(g: Gesture): void {
   ghost = null
   if (sess.seg === 0) return // 소리는 down에서 났다. 노트는 남기지 않는다
   const cv = cur()
@@ -966,7 +980,7 @@ function onGesture(g: Gesture): void {
   if (t.startsWith('chip:')) {
     const chip = chipById(t.slice(5))
     if (g.kind !== 'drag') {
-      if (!text.isOpen()) {
+      if (!text.isOpen() && !closedInput.has(g.pointerId)) {
         lastInputKind = 'chip'
         text.openInput('chip', fit, onTextDone)
       }
@@ -1000,7 +1014,7 @@ function onGesture(g: Gesture): void {
     return
   }
   if (t === 'slot:mat.blank') {
-    if (g.kind !== 'drag' && !text.isOpen()) {
+    if (g.kind !== 'drag' && !text.isOpen() && !closedInput.has(g.pointerId)) {
       lastInputKind = 'chip'
       text.openInput('chip', fit, onTextDone)
     }
@@ -1009,7 +1023,7 @@ function onGesture(g: Gesture): void {
   if (t.startsWith('panel:')) {
     const img = t.slice(6)
     if (img === 'absent') {
-      if (g.kind !== 'drag' && !text.isOpen()) {
+      if (g.kind !== 'drag' && !text.isOpen() && !closedInput.has(g.pointerId)) {
         lastInputKind = 'absent'
         text.openInput('absent', fit, onTextDone)
       }
@@ -1117,7 +1131,7 @@ function frame(): void {
     uiAlpha: sess.seg >= 1 ? out : 0,
     notes: cv.notes,
     images: cv.images,
-    labels: cv.labels,
+    labels: resolveLabels(cv.labels, cv.notes, sess.state.grid),
     imageEls: material.IMAGES,
     selection: cv.selection,
     slots: sess.slots,

@@ -72,6 +72,26 @@ export function chipRects(slots: Slots, count: number): Rect[] {
   return out
 }
 
+/**
+ * 면 위 라벨은 **자기 노트를 따라간다** — 첫 노트(on 최소)의 위쪽. 노트가 다 지워지면 라벨도 보이지 않는다 (R-010 · PI-006)
+ * 띠 라벨·노트 없는 라벨은 놓은 자리 그대로. 저장된 Label.x·y는 놓은 순간의 기록이라 바꾸지 않는다
+ */
+export function resolveLabels(labels: readonly Label[], notes: readonly Note[], grid: boolean): Label[] {
+  const out: Label[] = []
+  for (const l of labels) {
+    if (l.onAxis || l.ids.length === 0) {
+      out.push(l)
+      continue
+    }
+    const mine = notes.filter((n) => l.ids.includes(n.id))
+    if (mine.length === 0) continue
+    const first = mine.reduce((a, b) => (shown(b, grid).on < shown(a, grid).on ? b : a))
+    const v = shown(first, grid)
+    out.push({ ...l, x: Math.round(xOfOn(v.on)), y: Math.round(yOfPitch(v.pitch)) })
+  }
+  return out
+}
+
 /** 라벨의 글자 상자 — 면 위 라벨은 놓은 점 위쪽, 띠 라벨은 띠 안 */
 export function labelRect(l: Label): Rect {
   const w = Math.max(24, l.raw.length * 11 + 8)
@@ -98,6 +118,8 @@ export function listRect(i: number): Rect {
 }
 
 /** 노트 높이 = 음고 한 칸 (836 / K_P) */
+/** 노트를 잡는 여유 — 그려진 막대(≈17 px)보다 위아래로 넓게 잡힌다. 손가락 폭에 맞춘다 (R-010 · PI-007) */
+export const NOTE_HIT_SLOP = 8
 export const NOTE_H = SURFACE.h / K_P
 
 export function inRect(r: Rect, x: number, y: number): boolean {
@@ -259,9 +281,10 @@ export function hitTest(x: number, y: number, c: HitCtx): string {
   for (let i = c.notes.length - 1; i >= 0; i--) {
     const n = c.notes[i]
     if (!n) continue
-    const r = noteRect(n, c.grid)
+    const r0 = noteRect(n, c.grid)
+    const r = { x: r0.x - 4, y: r0.y - NOTE_HIT_SLOP, w: r0.w + 8, h: r0.h + NOTE_HIT_SLOP * 2 }
     if (!inRect(r, x, y)) continue
-    const edge = Math.min(NOTE_EDGE, r.w / 2)
+    const edge = Math.min(NOTE_EDGE, r.w / 3) // 짧은 노트는 몸통을 더 남긴다 — 옮기기가 길이 조정에 먹히지 않게
     return x >= r.x + r.w - edge ? `note.edge:${n.id}` : `note:${n.id}`
   }
   for (const l of c.labels) if (!l.onAxis && inRect(labelRect(l), x, y)) return `label:${l.id}`

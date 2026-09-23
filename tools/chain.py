@@ -276,7 +276,8 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
     # 적기
     commits = [e for e in events if e.get("type") == "text.commit"]
     aborts = [e for e in events if e.get("type") == "text.abort"]
-    out.append((all(e.get("chars", 0) > 3 for e in commits) and all(e.get("chars", 99) <= 3 or not e.get("raw") for e in aborts), f"text.commit {len(commits)} (chars>3) · text.abort {len(aborts)} (≤3자 또는 취소)"))
+    thr = int(header.get("text_abort_chars", 3)) if header else 3  # 헤더에 없으면 옛 규칙(3자) — 09.23 이전 로그
+    out.append((all(e.get("chars", 0) > thr for e in commits), f"text.commit {len(commits)} (chars > {thr}) · text.abort {len(aborts)}"))
     places = [e for e in events if e.get("type") == "text.place"]
     ok = True
     for pl in places:
@@ -285,6 +286,9 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
         else:
             ok &= pl.get("target") == "axis" and not pl.get("ids")
     out.append((ok, f"text.place {len(places)}건 — 면: 음절 수 = ids + truncated · 띠: 노트 없음"))
+    lmoves = [e for e in events if e.get("type") in ("label.move", "label.remove")]
+    placed_axis = {e.get("label") for e in places if e.get("target") == "axis"}
+    out.append((all(all(k in e for k in ("id", "x", "raw")) and e.get("id") in placed_axis for e in lmoves), f"label.move/remove {len(lmoves)}건 — 띠에 놓인 라벨만 · id·x·raw"))
     absents = [e for e in events if e.get("type") == "image.absent"]
     out.append((all("raw" in e and "chars" in e for e in absents), f"image.absent {len(absents)}건 raw · chars"))
     # 이미지 손잡이

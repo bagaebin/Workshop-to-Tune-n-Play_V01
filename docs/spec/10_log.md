@@ -33,4 +33,4 @@
 
 ## 상위 문서에 되돌릴 것
 
-_(없음)_
+- **09.23 R-011** — §10-2 타입 표에 행 추가 `label.move` `label.remove` | `id` `x` `raw` · §10-3 헤더 예시에 `"text_abort_chars":0` 추가

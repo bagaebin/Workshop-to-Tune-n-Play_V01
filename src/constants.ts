@@ -74,7 +74,7 @@ export const FAC_WINDOW = 1_500
 export const FAC_RECT = { x0: 0, y0: 0, x1: 30, y1: 32 } as const
 
 // ── 적기 · 회고
-export const TEXT_ABORT_CHARS = 3      // 이하이면 text.abort
+export const TEXT_ABORT_CHARS = 0      // 이하이면 text.abort — 빈 칸만. 짧은 글 판정은 분석에서 chars·dur·edits로 (09.23 · PI-008)
 export const IDLE_LIST_MIN = 60_000    // 회고 모드 정지 목록 문턱
 
 // ── 운영 플래그 — 세션 전원이 같은 값이어야 한다 (§14-2 cuts · §11-1 lock_rule)

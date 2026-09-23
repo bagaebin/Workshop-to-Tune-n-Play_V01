@@ -8,7 +8,7 @@
  */
 import {
   FLASH_FRAMES, TUTORIAL_NOTE, TUTORIAL_OUT_MS, VEL_FIXED, TONE_FIXED, LEN_DEFAULT,
-  W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG1_APPEAR, SEG1_CAP, SEG2_LEN, FADE_IN, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR,
+  W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG1_APPEAR, SEG1_CAP, SEG2_LEN, FADE_IN, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR, TEXT_ABORT_CHARS,
 } from './constants'
 import {
   computeFit, toVirtual, shuffledSlots, hitTest, pitchOfY, inFacRect, inRect, panelBlocks, sliderValue, slotRects, resolveLabels,
@@ -34,6 +34,7 @@ import * as canvasOps from './ops/canvas'
 import * as gen from './ops/gen'
 import * as text from './ops/text'
 import * as imageOps from './ops/image'
+import * as labelOps from './ops/label'
 
 declare const __BUILD__: string | undefined
 
@@ -134,6 +135,7 @@ const drags = new Map<number, notes.Edit>()
 const imageDrags = new Map<number, imageOps.ImageEdit>()
 const sliderDrags = new Map<number, { name: 'step' | 'spread'; prev: number }>()
 const closedInput = new Set<number>()
+const labelDrags = new Map<number, labelOps.LabelEdit>()
 let openSheet: () => void = () => {}
 
 const cur = (): Canvas => sess.canvases[sess.current] as Canvas
@@ -185,7 +187,8 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
     },
     actionable: (t) => {
       if (!(sess.seg === 0 || sess.seg === 1 || sess.seg === 2)) return false
-      if (t === 'none' || t.startsWith('slot.gone') || t.startsWith('label:')) return false
+      if (t === 'none' || t.startsWith('slot.gone')) return false
+      if (t.startsWith('label:') && !labelOps.isAxisLabel(cur(), t.slice(6))) return false // 면 위 라벨은 노트를 따라간다 (R-010)
       if (lockReason(t)) return false
       return true
     },
@@ -290,6 +293,7 @@ function headerFields(wall: string): Record<string, unknown> {
     mic_input: micInput,
     mic_recording: mic.hasPermission(),
     lock_rule: lockRule,
+    text_abort_chars: TEXT_ABORT_CHARS,
     cuts: sess.cuts,
     dev_fast: FAST || undefined,
     guided_access: pendingChecks?.guided_access ?? false,
@@ -695,6 +699,14 @@ function replay(events: log.Line[]): void {
         maxLabelId = Math.max(maxLabelId, Number(label.id.slice(1)) || 0)
         break
       }
+      case 'label.move': {
+        const l = cv.labels.find((x) => x.id === String(e.id))
+        if (l) l.x = Number(e.x)
+        break
+      }
+      case 'label.remove':
+        cv.labels = cv.labels.filter((x) => x.id !== String(e.id))
+        break
       case 'rule.param':
         if (e.name === 'step' || e.name === 'spread') params[e.name] = Number(e.value)
         break
@@ -841,6 +853,16 @@ function onMove(m: MoveInfo): void {
     return
   }
   const cv = cur()
+  if (m.target.startsWith('label:')) {
+    let le = labelDrags.get(m.pointerId)
+    if (!le) {
+      le = labelOps.begin(cv, m.target.slice(6)) ?? undefined
+      if (!le) return
+      labelDrags.set(m.pointerId, le)
+    }
+    labelOps.apply(cv, le, m.x - m.x0)
+    return
+  }
   if (m.target.startsWith('image.move:') || m.target.startsWith('image.size:')) {
     let e = imageDrags.get(m.pointerId)
     if (!e) {
@@ -871,6 +893,11 @@ function releaseHeld(pointerId: number, minLenMs = 0): void {
 
 function onCancel(pointerId: number): void {
   closedInput.delete(pointerId)
+  const le = labelDrags.get(pointerId)
+  if (le) {
+    labelOps.cancel(cur(), le)
+    labelDrags.delete(pointerId)
+  }
   releaseHeld(pointerId)
   ghost = null
   const cv = cur()
@@ -923,6 +950,17 @@ function handleGesture(g: Gesture): void {
   const t = g.target
   const inSurface = inRect(SURFACE, g.x1, g.y1)
   const inAxis = inRect(AXIS, g.x1, g.y1)
+
+  // 띠 라벨 — 끌어 옮기기 · 띠 밖에서 뗌 = 지우기 (R-011)
+  if (t.startsWith('label:')) {
+    const le = labelDrags.get(g.pointerId)
+    labelDrags.delete(g.pointerId)
+    if (g.kind === 'drag' && le) {
+      if (!inAxis) labelOps.remove(cv, le)
+      else labelOps.commit(cv, le)
+    }
+    return
+  }
 
   // 슬라이더 — 뗄 때 한 번 기록
   const sd = sliderDrags.get(g.pointerId)

@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### 2026-09-23 — 사용자 결정 반영 (R-011)
+- PI-008 `TEXT_ABORT_CHARS` 3 → 0 — 빈 칸만 `text.abort`, 세 글자 이하도 칩이 된다. 헤더 `text_abort_chars`
+- PI-009 시간축 띠 라벨 끌기 = `label.move`, 띠 밖에서 뗌 = `label.remove` (`src/ops/label.ts`) · 복구 재생 · chain.py 검사
+- 볼트 개발 명세 반영 대기 — docs/spec/02 · 06 · 10의 「상위 문서에 되돌릴 것」
+
 ### 2026-09-22 — 5단계 준비
 - `tools/chain.py --pilot` — 상수표 ☐ 교정 수치(τ 간격 분포 · 슬롯 근접 오접촉 · 탭 길이 · L 분위 · 규칙 첫 사용 · 마이크 · D1 적기 시간 · 발견 여부 · 버튼 넷 첫 접촉 · radiusX/force 상수 여부) · **D14 두 잠금식 비교**
 - `docs/acceptance/pilot-protocol.md` 신설 — 09.26 2회 진행 절차 · 로그 검사 · 교정 반영 순서 · 대안

@@ -164,7 +164,7 @@ export function coveredFromClientY(): number | null {
   return keyboardUp ? r.top : null
 }
 
-/** 바깥 탭 = 확정. 내용이 비었거나 TEXT_ABORT_CHARS 이하면 text.abort */
+/** 바깥 탭 = 확정. 빈 칸(TEXT_ABORT_CHARS 0)이거나 확정이 아니면(구간 종료 등) text.abort — 짧은 글도 칩이 된다 (PI-008) */
 export function closeInput(committed: boolean, onDone: (result: { committed: boolean; raw: string }) => void): void {
   if (!open) return
   const o = open
@@ -183,7 +183,7 @@ export function closeInput(committed: boolean, onDone: (result: { committed: boo
   if (stage) stage.style.transform = ''
   window.scrollTo(0, 0)
   log.spanClose('text')
-  const aborted = !committed || chars <= TEXT_ABORT_CHARS
+  const aborted = !committed || chars <= TEXT_ABORT_CHARS || raw.trim() === ''
   // pan · kb — 열린 동안 관측한 visual viewport 끌어올림 · 키보드 높이의 최댓값 (px). pan이 0이 아니면 보정이 동작한 것
   log.log(aborted ? 'text.abort' : 'text.commit', { source: o.kind, raw, chars, edits: o.edits, dur, pan: o.pan, kb: o.kb })
   onDone({ committed: !aborted, raw })

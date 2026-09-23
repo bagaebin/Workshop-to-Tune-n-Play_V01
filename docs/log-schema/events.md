@@ -39,11 +39,12 @@
 | `play.seek` | `at` | ☐ |
 | `play.start` | `from` | ☐ |
 | `play.stop` | `at` `heard[][]` `matches_scope` | ☐ |
-| `text.open` `text.commit` `text.abort` | `raw` `chars` `edits` `dur` | ☐ |
+| `text.open` `text.commit` `text.abort` | `raw` `chars` `edits` `dur` · 구현 추가 `source` `pan` `kb` | ✔ |
 | `text.place` | `target` `x` `y` `raw` `ids[]` `truncated` | ☐ |
 | `image.place` `image.move` `image.size` `image.remove` | `img` `x` `y` `w` `h` | ☐ |
 | `image.touch` | `img` `u` `v` | ☐ |
 | `image.absent` | `raw` `chars` | ☐ |
+| `label.move` `label.remove` | `id` `x` `raw` — 띠 라벨만 (R-011, 09.23 추가 · 볼트 반영 대기) | ✔ |
 | `mic.span` | `from` `to` `n` `gated_ms` | ☐ |
 | `mic.gate` | `on` | ☐ |
 | `mark` | `snapshot` `n_before` | ☐ |

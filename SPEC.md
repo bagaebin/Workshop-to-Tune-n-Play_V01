@@ -1,7 +1,7 @@
 # SPEC.md — Probe 개발 명세 (정본 복사본)
 
 > **원본** — Obsidian 볼트 `Galmuri/Projects/2026_Sound by Scratch/2026-09-22_Probe 개발 명세.md`
-> **동기화** — 2026-09-22 (개발 명세 `updated: 2026-09-22` 기준)
+> **동기화** — 2026-09-23 (개발 명세 `updated: 2026-09-23` 기준 · R-011 반영)
 > **규칙** — 이 파일은 볼트 원본을 **그대로 복사**한다. 여기서 직접 고치지 않는다. 값이 바뀌면 볼트 원본 → 이 파일 → `src/constants.ts` 순서로 옮긴다.
 > 본문의 `[[...]]` 링크는 볼트 안의 노트를 가리킨다. 저장소에서는 열리지 않는다 — 원본 목록은 [docs/00_sources.md](docs/00_sources.md).
 
@@ -68,7 +68,7 @@
 | `MIC_THR · MIC_ON · MIC_OFF · MIC_SPAN_END` | 0.02 · 40 · 150 · 1 500 ms | 마이크 온셋·종료·span 종료 | ☐ |
 | `MOVE_COALESCE · FLUSH` | 16 · 1 000 ms | touch.move 병합 · IndexedDB 기록 주기 | |
 | `FAC_TAPS · FAC_WINDOW · FAC_RECT` | 5 · 1 500 ms · (0,0)–(30,32) | 진행자 시트 열기 | |
-| `TEXT_ABORT_CHARS` | 3 | 이하이면 `text.abort` | |
+| `TEXT_ABORT_CHARS` | 0 | 이하이면 `text.abort` — 빈 칸만. 짧은 글 판정은 분석에서 (R-011 · PI-008) | |
 | `IDLE_LIST_MIN` | 60 000 ms | 회고 모드 정지 목록 문턱 | |
 
 ## 3. 화면과 좌표
@@ -251,11 +251,13 @@ Pointer Events. `touch-action: none`, `gesturestart` 차단, 더블탭 확대 �
 ### 6-7. 적기 — 칩 · 라벨
 
 ```
-mat.blank 탭 → text.open → 키보드 → 바깥 탭 → text.commit {raw,chars,edits,dur} (chars ≤ 3이면 text.abort)
+mat.blank 탭 → text.open → 키보드 → 바깥 탭 → text.commit {raw,chars,edits,dur} (빈 칸이면 text.abort)
 확정 → 칩이 mat.blank 슬롯에 붙는다 (최대 CHIP_MAX, 넘치면 가장 오래된 것 제거)
 칩 끌어 작업 면에 놓기 → text.place {target:'surface', x, y, raw, ids[]} + note.add {src:'text', count} + Label
 칩 끌어 시간축 띠에 놓기 → text.place {target:'axis', x, raw} + Label(onAxis)   — 노트 없음
 ```
+
+띠 라벨 끌기 → 옮기기 `label.move {id, x, raw}` · 띠 밖에서 뗌 → `label.remove {id, x, raw}`. 면 위 라벨은 자기 첫 노트 위를 따라가고 조작 대상이 아니다 (R-011 · PI-009).
 
 음절 → 노트: 한글 음절 1 = 노트 1 · 로마자 모음 묶음 1 = 노트 1 · 숫자 자릿수 1 = 노트 1 · 공백·문장부호 = 쉼 1칸(노트 없음). 간격 = `grid ? L/K_T : L/16`, `pitch` = 놓은 y(평탄), `len`=LEN_DEFAULT. `L`을 넘는 음절은 버리고 `text.place.truncated:n`.
 
@@ -383,6 +385,7 @@ getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGai
 | `play.stop` | `at` `heard[][]` `matches_scope` |
 | `text.open` `text.commit` `text.abort` | `raw` `chars` `edits` `dur` |
 | `text.place` | `target` `x` `y` `raw` `ids[]` `truncated` |
+| `label.move` `label.remove` | `id` `x` `raw` |
 | `image.place` `image.move` `image.size` `image.remove` | `img` `x` `y` `w` `h` |
 | `image.touch` | `img` `u` `v` |
 | `image.absent` | `raw` `chars` |
@@ -411,7 +414,8 @@ getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGai
   "slots_drawer":["image","blank","sound"], "slots_panel":["i3","i1","i5","i2","i4"],
   "loop_ms":8000, "grid_div":[48,16], "tau_ms":10000, "len_default_ms":250,
   "step_default_ms":500, "spread_default":0.5, "mic_threshold":0.02, "mic_input":true,
-  "lock_rule":"v0.3", "cuts":[], "guided_access":true, "silent_mode_off":true }
+  "lock_rule":"v0.3", "cuts":[], "guided_access":true, "silent_mode_off":true,
+  "text_abort_chars":0 }
 ```
 
 셔플 시드 = `pid`. 확정된 배열 셋을 통째로 남긴다.
@@ -543,7 +547,7 @@ alt   = 원식 — argmax(p over axes), 동점 gen > mat > grid   (기록만)
 **G — 기능**
 - [ ] ⚙ G1 탭·누르기·끌기가 각각 `note.add`로, `len`이 규칙대로 · 터치 → 소리 20 ms 내(👁)
 - [ ] ⚙ G2 `mic.span`과 `src:mic` 노트 · 녹음 파일이 세션 전체 · 게이트가 재생 중 닫힌다
-- [ ] ⚙ G3 `text.commit raw` 원문 · `text.abort`(≤3자) · 칩 3개 · `text.place target` 둘 다 · 음절 수 = `count`
+- [ ] ⚙ G3 `text.commit raw` 원문 · `text.abort`(빈 칸만) · 짧은 글('테스트')도 칩이 됨 · 띠 라벨 `label.move`/`label.remove` · 칩 3개 · `text.place target` 둘 다 · 음절 수 = `count`
 - [ ] ⚙ G4 `mat.peek` ≠ `mat.adopt` · 채택이 `state.mat`을 바꾼다 · 새 캔버스에서 `blank` · `image.place/touch` u,v
 - [ ] ⚙ G5 `note.edit`(prev 있음) ≠ `note.remove`+`note.add` · 요소 지우기 ≠ `canvas.discard` · 규칙·난수 열이 `count` 한 건
 - [ ] ⚙ G6 `play.seek` · `play.stop heard[]` · 순환 시 조각 둘 · `matches_scope`

@@ -22,7 +22,7 @@
 ## G — 기능
 - [ ] ⚙ G1 탭·누르기·끌기가 각각 `note.add`로, `len`이 규칙대로 · 터치 → 소리 20 ms 내(👁)
 - [ ] ⚙ G2 `mic.span`과 `src:mic` 노트 · 녹음 파일이 세션 전체 · 게이트가 재생 중 닫힌다
-- [ ] ⚙ G3 `text.commit raw` 원문 · `text.abort`(≤3자) · 칩 3개 · `text.place target` 둘 다 · 음절 수 = `count`
+- [ ] ⚙ G3 `text.commit raw` 원문 · `text.abort`(빈 칸만) · 짧은 글('테스트')도 칩이 됨 · 띠 라벨 `label.move`/`label.remove` · 칩 3개 · `text.place target` 둘 다 · 음절 수 = `count`
 - [ ] ⚙ G4 `mat.peek` ≠ `mat.adopt` · 채택이 `state.mat`을 바꾼다 · 새 캔버스에서 `blank` · `image.place/touch` u,v
 - [ ] ⚙ G5 `note.edit`(prev 있음) ≠ `note.remove`+`note.add` · 요소 지우기 ≠ `canvas.discard` · 규칙·난수 열이 `count` 한 건
 - [ ] ⚙ G6 `play.seek` · `play.stop heard[]` · 순환 시 조각 둘 · `matches_scope`

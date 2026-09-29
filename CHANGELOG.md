@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 2026-09-29 — T11 소리 재료 실물
+- `materials/sound.json` 더미 → 실물(6음 · 2 520 ms). 예비 2안은 `src/ops/material.ts` 주석 상수. 채택 시 상대 음정을 넷째 자리까지 보존
+- 이미지 5장은 아직 더미
+
 ### 2026-09-23 — 사용자 결정 반영 (R-011)
 - PI-008 `TEXT_ABORT_CHARS` 3 → 0 — 빈 칸만 `text.abort`, 세 글자 이하도 칩이 된다. 헤더 `text_abort_chars`
 - PI-009 시간축 띠 라벨 끌기 = `label.move`, 띠 밖에서 뗌 = `label.remove` (`src/ops/label.ts`) · 복구 재생 · chain.py 검사

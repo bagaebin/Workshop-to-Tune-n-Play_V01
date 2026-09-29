@@ -14,6 +14,16 @@ import * as log from '../log'
 import * as scope from './scope'
 import soundMaterial from '../../materials/sound.json'
 
+/**
+ * 소리 재료 실물 — materials/sound.json (T11 · 09.29 교체). 참여자에게 보이는 소리 재료는 이것 하나뿐이다.
+ * on은 첫 이벤트 0 기준 상대 ms · pitch는 0.5 + 반음/48 이라 첫 음과의 음정만 의미가 있다 · vel·tone 0.5 고정.
+ *
+ * 예비안 — 개발자 상수로만 둔다. 화면에 노출하거나 런타임에 바꾸지 않는다. 쓰려면 sound.json을 갈아끼우고 다시 빌드한다.
+ *   예비 1 — S2 (두 덩어리)
+ *   on  [0,110,230,1600,1760,2050]  pitch [0.5,0.4792,0.5625,0.6875,0.6042,0.5833]  len [90,90,400,140,160,700]
+ *   예비 2 — G4
+ *   on  [0,950,1370,1610,2210,2390] pitch [0.5,0.625,0.6875,0.7083,0.5625,0.5208]  len [930,300,220,150,160,800]
+ */
 const SOUND: Vals[] = (soundMaterial as { vals: Vals[] }).vals
 
 const imageUrls = import.meta.glob('../../materials/img/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
@@ -65,7 +75,7 @@ export function adoptSound(cv: Canvas, state: State, x: number, y: number): Note
     placed.push({
       id: nextId('n'),
       on,
-      pitch: Math.round(clamp(basePitch + (v.pitch - first.pitch), 0, 1) * 1000) / 1000,
+      pitch: Math.round(clamp(basePitch + (v.pitch - first.pitch), 0, 1) * 10000) / 10000, // 넷째 자리 — 원본 음정(반음/48 = 0.0208…)을 그대로 보존
       len: v.len,
       vel: VEL_FIXED,
       tone: TONE_FIXED,

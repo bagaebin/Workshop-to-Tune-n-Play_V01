@@ -253,6 +253,7 @@ export async function start(pid: string, checks: Checks): Promise<void> {
   pendingChecks = checks
   lockRule = checks.lock_rule ?? LOCK_RULE
   params = gen.defaultParams()
+  resetIds() // 새 세션 — 노트·이미지 id를 1부터
   canvasOps.restoreList([])
   await log.begin(pid, date, new Date().toISOString())
   await material.ready() // 사진 다섯 장이 디코드된 뒤에야 참여자 화면(플래시)이 뜬다 (N1)

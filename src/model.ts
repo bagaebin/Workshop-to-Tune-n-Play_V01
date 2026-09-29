@@ -135,6 +135,11 @@ export function nextId(prefix: 'n' | 'l' | 'c' | 'g'): string {
   return `${prefix}${k}`
 }
 
+/** 새 세션 — id를 1부터 다시 센다. 같은 페이지에서 세션을 이어 시작해도 n1부터 (TEST3에서 n32부터 시작) */
+export function resetIds(): void {
+  idCounters.clear()
+}
+
 /** 복구(session.resume) 시 — 로그의 마지막 번호에서 이어 센다 */
 export function bumpId(prefix: 'n' | 'l' | 'c' | 'g', atLeast: number): void {
   idCounters.set(prefix, Math.max(idCounters.get(prefix) ?? 0, atLeast))

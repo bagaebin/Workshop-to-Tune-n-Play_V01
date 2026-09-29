@@ -15,7 +15,7 @@ import {
   SURFACE, AXIS, PANEL, BOTTOM_RIGHT, quantPitch, type Fit,
 } from './layout'
 import {
-  INITIAL_STATE, newCanvas, matOf, bumpId, type Canvas, type Session, type Seg, type Src, type Vals, type Image, type Label, type Chip, type Note, type Gen, type LockAxis,
+  INITIAL_STATE, newCanvas, matOf, bumpId, resetIds, type Canvas, type Session, type Seg, type Src, type Vals, type Image, type Label, type Chip, type Note, type Gen, type LockAxis,
 } from './model'
 import { attach, type DownInfo, type MoveInfo, type Gesture } from './input'
 import { draw, type View, type Ghost, type ReviewOverlay } from './render'

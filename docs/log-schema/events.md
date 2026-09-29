@@ -5,7 +5,7 @@
 ## 봉투 (모든 줄 공통)
 
 ```json
-{ "t": 184230, "seq": 417, "type": "note.add", "seg": 1, "canvas": 2,
+{ "t": 184230, "seq": 417, "type": "note.add", "seg": 1, "phase": "create1", "canvas": 2,
   "state": { "mat": "sound", "grid": false, "gen": "hand" }, "target_mat": "image" }
 ```
 
@@ -14,6 +14,7 @@
 | `t` | `performance.now() − t0` · 정수 ms · 0점 = 플래시 |
 | `seq` | 단조 증가 |
 | `seg` | `-1` 준비 · `0` 튜토리얼 · `1` 자유 · `2` 잠금 · `3` 회고 |
+| `phase` | D15(R-012) — `prep` · `circle` · `explore` · `expect` · `intro` (seg 0 이하) · `create1` · `create2` · `review`. **SPEC 반영 대기** |
 | `canvas` | 캔버스 일련번호 |
 | `state` | 18칸 좌표 `{ mat, grid, gen }` |
 | `target_mat` | 조작이 향한 재료 `sound`·`image` 또는 `null` |
@@ -55,6 +56,10 @@
 | `lock.apply` | §11-3 → [examples/lock.apply.json](examples/lock.apply.json) | ☐ |
 | `idle` | `dur` | ☐ |
 | `facilitator` | `action` | ☐ |
+| `phase.start` `phase.end` | `phase`(시작하거나 끝나는 단계 — 이 두 타입에서는 봉투 `phase` 자리에 이 값이 적힌다) `by` (`facilitator`\|`timer`) · D15 · SPEC 반영 대기 | ✔ |
+| `workspace.reset` | `reason` (`intro`\|`create`) `from` `to` — 직전에 `snapshot reason:phase` | ✔ |
+| `intro.step` | `i` `key` — 띠에 그 단계가 보일 때마다(이전으로 돌아가도) | ✔ |
+| `intro.done` | — | ✔ |
 
 `vals[]` 원소 = `{ on, pitch, len, vel, tone }`. `touch.move`는 `MOVE_COALESCE`(16 ms)로 병합.
 

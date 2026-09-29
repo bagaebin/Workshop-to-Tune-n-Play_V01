@@ -13,6 +13,7 @@
 
 2단계 — 체류/idle 재계산(§10-5) · note.edit prev · scope.set 값 · N2(pointers≥2 · axis 끌기) · session.resume.
 3단계 — play.start/stop 짝 · heard[][] · matches_scope · mat.peek ≠ mat.adopt · 채택이 state.mat을 바꿈 · image.place 필드 · canvas.new/discard/switch/evict · 산출 밀도 state × src(§10-2).
+D15(09.29) — 단계(phase): circle → explore → expect → intro → create1 → create2 → review. 창작 전 단계는 seg 0. 타이머 값은 헤더(seg1_appear_ms 등)에서 읽는다.
 4단계 — lock.apply 재계산(p · p_norm · candidates · axis · value · alt) · done.appear/cap 시각 · 구간 순서 1→2→(3) · gen.set/rule.param · 규칙·난수 열 · 적기(음절 수 = count · abort ≤ 3자 · place target) · 이미지 손잡이 · mic.span · 잠금 뒤 slot.gone 접촉.
 의존  표준 라이브러리만
 """
@@ -24,6 +25,7 @@ from collections import Counter, defaultdict
 
 MAT = {"blank": "빈면", "sound": "소리", "image": "이미지"}
 GEN = {"hand": "손", "rule": "규칙", "random": "난수"}
+PHASE_KO = {"circle": "원", "explore": "① 탐색", "expect": "② 기대 회고", "intro": "③ 기능 소개", "create1": "구간 1", "create2": "구간 2", "review": "회고"}
 
 HEADER_REQUIRED = [
     "pid", "date", "build", "device", "os", "standalone", "viewport", "scale", "letterbox",
@@ -76,7 +78,11 @@ def chain(header: dict | None, events: list[dict]) -> str:
     for e in events:
         t = e.get("t", 0)
         typ = e.get("type", "")
-        if typ == "seg.start":
+        if typ == "phase.start":
+            parts.append(f"[{PHASE_KO.get(e.get('phase'), e.get('phase'))} {mmss(t)}]")
+        elif typ == "workspace.reset":
+            parts.append(f"[빈 작업 공간 {e.get('from')}→{e.get('to')} {mmss(t)}]")
+        elif typ == "seg.start":
             parts.append(f"[구간 {e.get('seg')} 시작 {mmss(t)}]")
         elif typ == "seg.end":
             parts.append(f"[구간 {e.get('seg')} 끝 {mmss(t)} by:{e.get('by')}]")
@@ -135,8 +141,8 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
     seg_starts = [e.get("seg") for e in events if e.get("type") == "seg.start"]
     out.append((seg_starts == sorted(seg_starts), f"seg.start 순서 {seg_starts}"))
     # seg 0 접촉은 노트를 남기지 않는다
-    seg0_notes = [a for a in adds if a.get("seg") == 0]
-    out.append((not seg0_notes, "튜토리얼(seg 0) 접촉이 노트를 남기지 않음"))
+    seg0_notes = [a for a in adds if a.get("seg") == 0 and a.get("phase") not in ("explore", "intro")]
+    out.append((not seg0_notes, "튜토리얼 원 · 기대 회고 중에는 노트가 남지 않음 (탐색 · 소개의 노트는 phase로 구분)"))
     # 2단계 — note.edit prev · scope.set 값 · N2 · grid by · idle
     edits = [e for e in events if e.get("type") == "note.edit"]
     ok = all(len(e.get("ids", [])) == e.get("count") == len(e.get("prev", [])) == len(e.get("vals", [])) and e.get("field") in ("pos", "len") for e in edits)
@@ -225,8 +231,9 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
     s1 = next((e for e in starts_seg if e.get("seg") == 1), None)
     appear = next((e for e in events if e.get("type") == "done.appear"), None)
     done = next((e for e in events if e.get("type") == "done"), None)
-    appear_ms = int(header.get("dev_fast") and 8000 or 480000) if header else 480000
-    cap_ms = int(header.get("dev_fast") and 15000 or 900000) if header else 900000
+    hd = header or {}
+    appear_ms = int(hd.get("seg1_appear_ms") or (8000 if hd.get("dev_fast") else 480000))  # 헤더에 없으면 D15 이전 값
+    cap_ms = int(hd.get("seg1_cap_ms") or (15000 if hd.get("dev_fast") else 900000))
     if s1 and appear:
         d = appear.get("t", 0) - s1.get("t", 0)
         out.append((abs(d - appear_ms) <= 50, f"done.appear = seg1 + {appear_ms} ± 50 (실측 +{d})"))
@@ -301,6 +308,33 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
     out.append((all(e.get("from", 1) <= e.get("to", 0) and e.get("n", -1) >= 0 and e.get("gated_ms", -1) >= 0 for e in spans), f"mic.span {len(spans)}건 from ≤ to · n · gated_ms"))
     mic_notes = [a for a in adds if a.get("src") == "mic"]
     out.append((all(0 <= a["vals"][0].get("vel", -1) <= 1 for a in mic_notes if a.get("vals")), f"src:mic {len(mic_notes)}건 vel ∈ [0,1]"))
+    # D15 — 창작 전 단계
+    if (header or {}).get("protocol") == "D15":
+        ph = [e.get("phase") for e in events if e.get("type") == "phase.start"]
+        order = ["explore", "expect", "intro"]
+        out.append((ph == [x for x in order if x in ph], f"창작 전 단계 순서 {ph}"))
+        s1 = next((e for e in events if e.get("type") == "seg.start" and e.get("seg") == 1), None)
+        if s1 and ph:
+            i1 = events.index(s1)
+            resets = [e for e in events[:i1] if e.get("type") == "workspace.reset" and e.get("reason") == "create"]
+            out.append((len(resets) == 1 and events.index(resets[0]) == i1 - 1, "구간 1 직전에 빈 작업 공간(workspace.reset reason:create)"))
+            cv1 = s1.get("canvas")
+            carried = [a for a in adds if a.get("canvas") == cv1 and a.get("t", 0) < s1.get("t", 0)]
+            st = s1.get("state") or {}
+            out.append((not carried and st == {"mat": "blank", "grid": False, "gen": "hand"}, "구간 1은 빈 캔버스 · 초기 상태(빈면,OFF,손)에서 시작"))
+        ex_s = next((e for e in events if e.get("type") == "phase.start" and e.get("phase") == "explore"), None)
+        ex_e = next((e for e in events if e.get("type") == "phase.end" and e.get("phase") == "explore"), None)
+        if ex_s and ex_e:
+            d = ex_e.get("t", 0) - ex_s.get("t", 0)
+            lim = int(header.get("explore_ms", 240000))
+            ok = d <= lim + 60 and (ex_e.get("by") != "timer" or abs(d - lim) <= 60)
+            out.append((ok, f"자유 탐색 {d} ms (상한 {lim} · by:{ex_e.get('by')})"))
+        frozen = [e for e in events if e.get("type") == "touch.down" and e.get("phase") == "expect"]
+        out.append((all(not e.get("acted") for e in frozen), f"기대 회고 중 접촉 {len(frozen)}건 acted:false"))
+        steps = [e for e in events if e.get("type") == "intro.step"]
+        out.append((all("key" in e and isinstance(e.get("i"), int) for e in steps), f"intro.step {len(steps)}건 i · key"))
+        pre_marks = [e for e in events if e.get("type") == "mark" and e.get("seg") == 0]
+        out.append((True, f"(참고) 창작 전 마킹 {len(pre_marks)}건 — F3에서 제외한다"))
     # 회고 모드 접촉
     seg3 = [e for e in events if e.get("type") == "touch.down" and e.get("seg") == 3]
     out.append((all(not e.get("acted") for e in seg3), f"회고(seg 3) 접촉 {len(seg3)}건 acted:false"))
@@ -593,6 +627,9 @@ def summary(events: list[dict]) -> str:
     lines.append(f"note.add src별: {dict(by_src)}")
     lines.append(f"touch.down: acted {acted.get((True, False), 0)} · 비작동 {acted.get((False, False), 0)} · 가려짐 {sum(n for (a, b), n in acted.items() if b)}")
     lines.append(f"touch.down target별: {dict(targets)}")
+    by_phase = Counter(d.get("phase") for d in downs if d.get("phase"))
+    if by_phase:
+        lines.append("touch.down 단계별: " + " · ".join(f"{PHASE_KO.get(k, k)} {v}" for k, v in by_phase.items()))
     marks = [e for e in events if e.get("type") == "mark"]
     if marks:
         lines.append("마킹: " + " · ".join(f"{mmss(m.get('t', 0))} {m.get('snapshot')} n_before={m.get('n_before')}" for m in marks))

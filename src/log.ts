@@ -6,17 +6,18 @@
  * IndexedDB 스키마는 docs/decisions/R-003.
  */
 import { FLUSH, TAU } from './constants'
-import type { Canvas, Seg, State } from './model'
+import type { Canvas, Phase, Seg, State } from './model'
 
 export interface LogCtx {
   seg: Seg
+  phase: Phase
   canvas: number
   state: State
 }
 
 export type Line = Record<string, unknown>
 
-let ctxProvider: () => LogCtx = () => ({ seg: -1, canvas: 0, state: { mat: 'blank', grid: false, gen: 'hand' } })
+let ctxProvider: () => LogCtx = () => ({ seg: -1, phase: 'prep', canvas: 0, state: { mat: 'blank', grid: false, gen: 'hand' } })
 let t0 = 0
 let seq = 0
 let sid = ''
@@ -127,6 +128,7 @@ export function log(type: string, fields: Line = {}, targetMat: 'sound' | 'image
     seq: seq++,
     type,
     seg: c.seg,
+    phase: c.phase,
     canvas: c.canvas,
     state: { ...c.state },
     target_mat: targetMat,
@@ -339,7 +341,7 @@ function account(t: number, type: string, seg: Seg, state: State): void {
       } else if (!replaying) {
         // 재귀 방지 — 직접 밀어 넣는다
         const c = ctxProvider()
-        buffer.push({ t, seq: seq++, type: 'idle', seg: c.seg, canvas: c.canvas, state: { ...c.state }, target_mat: null, dur: gap })
+        buffer.push({ t, seq: seq++, type: 'idle', seg: c.seg, phase: c.phase, canvas: c.canvas, state: { ...c.state }, target_mat: null, dur: gap })
       }
     }
     lastActivityT = t

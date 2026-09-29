@@ -33,9 +33,16 @@ export const SPREAD_DEFAULT = 0.5      // ☐ 난수 지터 (0–1)
 export const TAU = 10_000              // ☐ 정지 임계
 
 // ── 세션 타이머 (기준 = seg.start seg:1의 t)
-export const SEG1_APPEAR = 480_000     // '여기까지' 등장
-export const SEG1_CAP = 900_000        // 구간 1 상한
-export const SEG2_LEN = 420_000        // 구간 2 길이
+// D15(09.29) — 구간 1 10분 + 구간 2 10분. SPEC.md §2는 볼트 개정 반영 전까지 옛 값(480 000 · 900 000 · 420 000)이다
+export const SEG1_APPEAR = 300_000     // '여기까지' 등장 — ★가정: 상한의 절반(5분). 결정은 "구간 1 10분"만 정했다. 볼트에서 확정 필요
+export const SEG1_CAP = 600_000        // 구간 1 상한 (10분)
+export const SEG2_LEN = 600_000        // 구간 2 길이 (10분)
+
+// ── 창작 전 단계 (D15 안 2) — 자유 탐색 → 기대 회고 → 기능 소개
+export const EXPLORE_LEN = 240_000     // 자유 탐색 4분 — 끝나면 자동으로 기대 회고(화면 동결)
+export const EXPECT_GUIDE = 180_000    // 기대 회고 3분 — 안내 시간(자동 전환 없음)
+export const INTRO_GUIDE = 180_000     // 기능 소개 3분 — 안내 시간(자동 전환 없음)
+export const PRESS_ACK = 300           // 우 4 눌림 확인 — 버튼이 밝아지는 시간 (D15 ③)
 export const FADE_IN = 3_000           // '여기까지' 페이드 인
 
 // ── 제어 요소 · 노트 · 이미지

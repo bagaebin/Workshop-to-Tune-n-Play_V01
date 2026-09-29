@@ -69,6 +69,10 @@ export interface View {
   review: ReviewOverlay | null
   /** 준비 화면(seg −1)에만 작게 — 진행자가 빌드를 확인한다 */
   build: string
+  /** 방금 눌린 우 4 — 눌림 확인 (D15 ③) */
+  pressed: ReadonlySet<string>
+  /** 기능 소개 — 밝힐 자리. 나머지는 어둡게 (D15 안 2 ③) */
+  spotlight: readonly Rect[] | null
 }
 
 const C = {
@@ -79,6 +83,7 @@ const C = {
   bottom: '#0e0e0e',
   slotFill: '#1c1c1c',
   slotFillActive: '#3a3a3a',
+  slotPressed: '#7a7a7a',
   slotLine: '#3a3a3a',
   slotLineActive: '#8a8a8a',
   label: '#c8c8c8',
@@ -140,6 +145,7 @@ export function draw(ctx: CanvasRenderingContext2D, fit: Fit, v: View): void {
     drawSlots(ctx, v)
     drawChips(ctx, v)
     if (v.panelOpen) drawPanel(ctx, v)
+    if (v.spotlight) drawSpotlight(ctx, v.spotlight)
     if (v.ghost) drawGhost(ctx, v.ghost)
     ctx.globalAlpha = 1
   }
@@ -152,6 +158,20 @@ export function draw(ctx: CanvasRenderingContext2D, fit: Fit, v: View): void {
     ctx.fill()
     ctx.globalAlpha = 1
   }
+}
+
+/** 기능 소개 — 밝힌 자리만 남기고 어둡게. 표시일 뿐 접촉은 어디서나 평소대로 동작한다 */
+function drawSpotlight(ctx: CanvasRenderingContext2D, rects: readonly Rect[]): void {
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'
+  ctx.beginPath()
+  ctx.rect(0, 0, W, H)
+  for (const r of rects) ctx.rect(r.x - 6, r.y - 6, r.w + 12, r.h + 12)
+  ctx.fill('evenodd')
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'
+  ctx.lineWidth = 2
+  for (const r of rects) ctx.strokeRect(r.x - 6, r.y - 6, r.w + 12, r.h + 12)
+  ctx.restore()
 }
 
 function fillRect(ctx: CanvasRenderingContext2D, r: Rect, color: string): void {
@@ -212,18 +232,25 @@ function drawImages(ctx: CanvasRenderingContext2D, images: readonly Image[], v: 
   clipSurface(ctx)
   for (const im of images) {
     drawImageEl(ctx, v.imageEls.get(im.img), im)
-    ctx.strokeStyle = C.handle
+    // 손잡이 (D15 ④) — 사진 위에서도 보이게 어두운 바탕을 깐다. 옮기기 = 채운 사각형, 크기 = 빗금 셋. 글자 없음
+    const m = { x: im.x, y: im.y, w: HANDLE, h: HANDLE }
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillRect(m.x, m.y, m.w, m.h)
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillRect(m.x + 14, m.y + 14, HANDLE - 28, HANDLE - 28)
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
     ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(im.x + 2, im.y + HANDLE / 2)
-    ctx.lineTo(im.x + 2, im.y + 2)
-    ctx.lineTo(im.x + HANDLE / 2, im.y + 2)
-    ctx.stroke()
+    ctx.strokeRect(m.x + 1, m.y + 1, m.w - 2, m.h - 2)
     if (!v.imageSizeCut) {
+      const z = { x: im.x + im.w - HANDLE, y: im.y + im.h - HANDLE, w: HANDLE, h: HANDLE }
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      ctx.fillRect(z.x, z.y, z.w, z.h)
+      ctx.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2)
       ctx.beginPath()
-      ctx.moveTo(im.x + im.w - 2, im.y + im.h - HANDLE / 2)
-      ctx.lineTo(im.x + im.w - 2, im.y + im.h - 2)
-      ctx.lineTo(im.x + im.w - HANDLE / 2, im.y + im.h - 2)
+      for (const d of [12, 22, 32]) {
+        ctx.moveTo(z.x + z.w - 8, z.y + z.h - 8 - d)
+        ctx.lineTo(z.x + z.w - 8 - d, z.y + z.h - 8)
+      }
       ctx.stroke()
     }
   }
@@ -242,6 +269,8 @@ function drawNotes(ctx: CanvasRenderingContext2D, notes: readonly Note[], v: Vie
       ctx.strokeStyle = C.noteSelRing
       ctx.lineWidth = 2
       ctx.strokeRect(r.x - 3, r.y - 3, r.w + 6, r.h + 6)
+      // 길이 손잡이 (D15 ④) — 선택된 노트의 오른쪽 끝에 어두운 세로 막대
+      if (r.w >= 14) fillRect(ctx, { x: r.x + r.w - 7, y: r.y + 2, w: 3, h: r.h - 4 }, '#2a2a2a')
     }
   }
   ctx.restore()
@@ -359,7 +388,7 @@ function drawSlots(ctx: CanvasRenderingContext2D, v: View): void {
     if (isDone && !v.doneVisible) continue // 등장 전에는 자리만 비운다 (§3-2)
     ctx.globalAlpha = base * (isDone ? v.doneAlpha : 1)
     const on = v.active.has(s.name)
-    fillRect(ctx, s.rect, on ? C.slotFillActive : C.slotFill)
+    fillRect(ctx, s.rect, v.pressed.has(s.name) ? C.slotPressed : on ? C.slotFillActive : C.slotFill)
     ctx.strokeStyle = on ? C.slotLineActive : C.slotLine
     ctx.strokeRect(s.rect.x + 1, s.rect.y + 1, s.rect.w - 2, s.rect.h - 2)
     const label = SLOT_LABEL[s.name]

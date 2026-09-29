@@ -75,8 +75,18 @@ export interface Canvas {
   kept: boolean
 }
 
-/** -1 준비 · 0 튜토리얼 · 1 자유 · 2 잠금 · 3 회고 */
+/** -1 준비 · 0 창작 전(원 · 탐색 · 기대 회고 · 기능 소개) · 1 구간 1 · 2 구간 2(잠금) · 3 회고 */
 export type Seg = -1 | 0 | 1 | 2 | 3
+
+/**
+ * 단계 (D15 안 2). seg는 분석 호환을 위해 그대로 두고, 창작 전의 네 단계는 모두 seg 0이다.
+ *   prep(−1) → circle → explore → expect → intro (0) → create1 (1) → create2 (2) → review (3)
+ */
+export type Phase = 'prep' | 'circle' | 'explore' | 'expect' | 'intro' | 'create1' | 'create2' | 'review'
+
+export const SEG_OF: Readonly<Record<Phase, Seg>> = {
+  prep: -1, circle: 0, explore: 0, expect: 0, intro: 0, create1: 1, create2: 2, review: 3,
+}
 
 export type LockAxis = 'mat' | 'grid' | 'gen'
 
@@ -96,6 +106,7 @@ export interface Session {
   seed: string
   build: string
   seg: Seg
+  phase: Phase
   /** 플래시 시각 (performance.now) */
   t0: number
   state: State

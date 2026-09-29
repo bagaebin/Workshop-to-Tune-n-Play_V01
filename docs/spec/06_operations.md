@@ -19,7 +19,7 @@
 | §6-7 | `ops/text.ts` | 빈 면 슬롯 → 입력 칸 → 칩(3) → 면에 놓으면 음절 = 노트 + 라벨 · 띠에 놓으면 라벨만 · `text.abort`(≤3자) · `image.absent` |
 | §6-8 | `ops/image.ts` | 손잡이 둘(move 좌상 · size 우하 48×48) · 3:2 고정 · 면 밖 = 제거 · 노트 아래에 그림 |
 | §6-9 | `ops/canvas.ts` | keep/discard/switch/evict · 캔버스별 `mat·playFrom·selection` · 떠나는 캔버스 스냅샷 |
-| §6-10 | `ops/buttons.ts` | `mark`(화면 변화 없음 + 스냅샷) · `done`(구간 1 종료) |
+| §6-10 | `ops/buttons.ts` | `mark`(스냅샷 · **09.29 D15 — 눌림 확인 300 ms만, 그 밖의 화면 변화 없음**) · `done`(구간 1 종료) |
 
 ## 열린 항목
 

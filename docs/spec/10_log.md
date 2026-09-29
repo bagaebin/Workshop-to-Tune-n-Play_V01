@@ -33,4 +33,6 @@
 
 ## 상위 문서에 되돌릴 것
 
+- **09.29 D15 (볼트 반영 대기)** — §10-1 봉투에 `phase` · §10-2에 `phase.start` `phase.end` `workspace.reset` `intro.step` `intro.done` · §10-3 헤더에 `protocol` `explore_ms` `seg1_appear_ms` `seg1_cap_ms` `seg2_len_ms`. 표는 [../log-schema/events.md](../log-schema/events.md)
+
 - ✅ **09.23 R-011 (볼트 반영 · SPEC.md 동기화 완료)** — §10-2 타입 표에 행 추가 `label.move` `label.remove` | `id` `x` `raw` · §10-3 헤더 예시에 `"text_abort_chars":0` 추가

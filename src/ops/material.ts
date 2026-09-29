@@ -30,17 +30,29 @@ const imageUrls = import.meta.glob('../../materials/img/*.png', { eager: true, q
 
 export const IMAGES = new Map<string, HTMLImageElement>()
 
-/** 첫 페인트 전에 디코드해 둔다 — 로딩 없음 (N1) */
-export async function preload(): Promise<void> {
-  const jobs: Promise<void>[] = []
-  for (const [path, url] of Object.entries(imageUrls)) {
-    const name = path.split('/').pop()?.replace(/\.png$/, '') ?? path
-    const img = new Image()
-    img.src = url
-    IMAGES.set(name, img)
-    jobs.push(img.decode().catch(() => undefined))
-  }
-  await Promise.all(jobs)
+let readyPromise: Promise<void> | null = null
+
+/** 다섯 장을 디코드해 둔다 — 로딩 없음 (N1). 참여자가 보는 첫 화면(플래시) 전에 반드시 끝나야 하므로 session.start·tryResume이 ready()를 기다린다 */
+export function preload(): Promise<void> {
+  if (readyPromise) return readyPromise
+  readyPromise = (async () => {
+    const jobs: Promise<void>[] = []
+    for (const [path, url] of Object.entries(imageUrls)) {
+      const name = path.split('/').pop()?.replace(/\.png$/, '') ?? path
+      const img = new Image()
+      img.decoding = 'sync'
+      img.alt = '' // 화면에 이름·설명을 두지 않는다 (§4 — 캔버스에만 그리므로 DOM에 붙지도 않는다)
+      img.src = url
+      IMAGES.set(name, img)
+      jobs.push(img.decode().catch(() => undefined))
+    }
+    await Promise.all(jobs)
+  })()
+  return readyPromise
+}
+
+export function ready(): Promise<void> {
+  return preload()
 }
 
 export function soundDuration(): number {

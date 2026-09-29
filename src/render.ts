@@ -193,9 +193,16 @@ function clipSurface(ctx: CanvasRenderingContext2D): void {
   ctx.clip()
 }
 
+/** 비율을 지켜 안에 맞춘다(object-fit: contain). 원본이 3:2면 사각형을 꽉 채운다 — 잘리는 곳 없음 */
 function drawImageEl(ctx: CanvasRenderingContext2D, el: HTMLImageElement | undefined, r: Rect): void {
-  if (el && el.complete && el.naturalWidth > 0) ctx.drawImage(el, r.x, r.y, r.w, r.h)
-  else fillRect(ctx, r, '#333')
+  if (!(el && el.complete && el.naturalWidth > 0)) {
+    fillRect(ctx, r, '#333')
+    return
+  }
+  const k = Math.min(r.w / el.naturalWidth, r.h / el.naturalHeight)
+  const w = el.naturalWidth * k
+  const h = el.naturalHeight * k
+  ctx.drawImage(el, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h)
 }
 
 /** 이미지는 노트 아래. 나중에 놓은 것이 위. 손잡이는 작은 모서리 표시로 상시 (§6-8) */

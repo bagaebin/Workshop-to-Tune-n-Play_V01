@@ -255,6 +255,7 @@ export async function start(pid: string, checks: Checks): Promise<void> {
   params = gen.defaultParams()
   canvasOps.restoreList([])
   await log.begin(pid, date, new Date().toISOString())
+  await material.ready() // 사진 다섯 장이 디코드된 뒤에야 참여자 화면(플래시)이 뜬다 (N1)
   audio.ensure()
   audio.warm()
   flashLeft = FLASH_FRAMES // 다음 프레임에서 플래시 시작 → onFlashStart
@@ -572,6 +573,7 @@ export function reviewClear(): void {
 export async function tryResume(): Promise<boolean> {
   const r = await log.findResumable()
   if (!r) return false
+  await material.ready()
   const h = r.header
   sess = freshSession()
   sess.pid = String(h.pid ?? r.pid)

@@ -195,10 +195,10 @@ function clipSurface(ctx: CanvasRenderingContext2D): void {
 
 /** 비율을 지켜 안에 맞춘다(object-fit: contain). 원본이 3:2면 사각형을 꽉 채운다 — 잘리는 곳 없음 */
 function drawImageEl(ctx: CanvasRenderingContext2D, el: HTMLImageElement | undefined, r: Rect): void {
-  if (!(el && el.complete && el.naturalWidth > 0)) {
-    fillRect(ctx, r, '#333')
-    return
-  }
+  // 준비되지 않았으면 아무것도 그리지 않는다 — 플레이스홀더·대체 사각형 없음 (N1). 디코드는 첫 화면 전에 끝나 있다
+  if (!(el && el.complete && el.naturalWidth > 0)) return
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high' // 150 × 100 썸네일로 줄이거나 1206 × 804까지 키워도 거칠지 않게
   const k = Math.min(r.w / el.naturalWidth, r.h / el.naturalHeight)
   const w = el.naturalWidth * k
   const h = el.naturalHeight * k

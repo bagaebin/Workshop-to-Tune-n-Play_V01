@@ -62,7 +62,7 @@
 - [x] `session.ts` 타이머 — `done.appear` 페이드 · `cap` · 구간 2 · 회고 동결. `done`은 session.ts의 `endSeg1`에서(buttons.ts는 mark만)
 - [x] `lock.ts` 계산 + `session.ts` 적용 — `slot.gone` · `by:lock` · `alt` 병기
 - [x] `facilitator.ts` 완성 — 세션 중 · 회고(마킹 재생 · 미사용 · 정지 · 버튼 인지)
-- [ ] 재료 실물 교체 (**T11**) — 소리 ✅ 09.29 (`sound.json` 6음 · 예비 2안 주석) · 이미지 5장 ☐
+- [x] 재료 실물 교체 (**T11**) — 소리 ✅ 09.29 (`sound.json` 6음 · 예비 2안 주석) · 이미지 5장 ✅ 09.29 (PNG 1200 × 800)
 - [x] **절단 후보 1 · 2** — `mic.ts` 입력 채널(온셋 · 피치 · 게이트) · `ops/image.ts` 손잡이 둘
 - [x] **절단 후보 4 · 5** — 규칙 슬라이더 · 텍스트 라벨 렌더
 

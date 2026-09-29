@@ -2,7 +2,7 @@
  * ops/notes.ts — 작업 면 노트 (SPEC §6-1)
  *
  * 더하기 — 탭: len = LEN_DEFAULT · 누르기: len = 누른 시간 · 끌기: on·pitch = 시작점, len = max(기본, 가로 이동량→ms)
- * 고치기 — note 끌기 = pos(on·pitch) · note.edge 끌기 = len. 대상은 선택 전체(포함 시) 또는 그 노트. 뗄 때 note.edit prev[] vals[]
+ * 고치기 — note 끌기 = pos(on·pitch) · 선택된 노트의 손잡이 끌기 = len (오른쪽 끝: len · 왼쪽 끝: on과 len, 오른쪽 끝 고정 — V1.0 §3-2). 대상은 선택 전체(포함 시) 또는 그 노트. 뗄 때 note.edit prev[] vals[]
  * 지우기 — 끌기 후 작업 면 밖에서 뗌 = note.remove (대상은 고치기와 같다)
  * 새 노트를 놓으면 선택 = 그 노트 하나, allOn = false.
  */
@@ -37,6 +37,8 @@ export type EditField = 'pos' | 'len'
 
 export interface Edit {
   field: EditField
+  /** 길이 고치기에서 잡은 끝 */
+  edge: 'l' | 'r' | null
   ids: string[]
   prev: Vals[]
   /** 끌기 시작 시점의 편집 범위 값 */
@@ -46,11 +48,11 @@ export interface Edit {
 const pick = (n: Note): Vals => ({ on: n.on, pitch: n.pitch, len: n.len, vel: n.vel, tone: n.tone })
 
 /** 끌기 시작 — 대상과 원값을 잡아 둔다 */
-export function beginEdit(cv: Canvas, noteId: string, field: EditField): Edit | null {
+export function beginEdit(cv: Canvas, noteId: string, field: EditField, edge: 'l' | 'r' = 'r'): Edit | null {
   const ids = scope.targetsFor(cv, noteId)
   const notes = ids.map((id) => cv.notes.find((n) => n.id === id)).filter((n): n is Note => !!n)
   if (notes.length === 0) return null
-  return { field, ids: notes.map((n) => n.id), prev: notes.map(pick), scope: scope.scopeOf(cv) }
+  return { field, edge: field === 'len' ? edge : null, ids: notes.map((n) => n.id), prev: notes.map(pick), scope: scope.scopeOf(cv) }
 }
 
 /** 끌기 중 — 시작점 대비 이동량(px)을 원값에 더한다. 화면은 이것을 그대로 그린다 */
@@ -62,6 +64,11 @@ export function applyDrag(cv: Canvas, e: Edit, dx: number, dy: number): void {
     if (e.field === 'pos') {
       n.on = Math.round(clamp(p.on + msOfDx(dx), 0, L))
       n.pitch = round3(clamp(p.pitch - dy / SURFACE.h, 0, 1))
+    } else if (e.edge === 'l') {
+      const end = p.on + p.len
+      const on = Math.round(clamp(p.on + msOfDx(dx), 0, end - 1))
+      n.on = on
+      n.len = end - on
     } else {
       n.len = Math.round(clamp(p.len + msOfDx(dx), 1, L))
     }
@@ -76,7 +83,7 @@ export function commitEdit(cv: Canvas, e: Edit): boolean {
     return !p || v.on !== p.on || v.pitch !== p.pitch || v.len !== p.len
   })
   if (!changed) return false
-  log.log('note.edit', { ids: e.ids, count: e.ids.length, scope: e.scope, field: e.field, prev: e.prev, vals }, matOfTargets(cv, e.ids))
+  log.log('note.edit', { ids: e.ids, count: e.ids.length, scope: e.scope, field: e.field, edge: e.edge ?? undefined, prev: e.prev, vals }, matOfTargets(cv, e.ids))
   return true
 }
 

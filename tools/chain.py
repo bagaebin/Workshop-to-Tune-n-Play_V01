@@ -13,7 +13,8 @@
 
 2단계 — 체류/idle 재계산(§10-5) · note.edit prev · scope.set 값 · N2(pointers≥2 · axis 끌기) · session.resume.
 3단계 — play.start/stop 짝 · heard[][] · matches_scope · mat.peek ≠ mat.adopt · 채택이 state.mat을 바꿈 · image.place 필드 · canvas.new/discard/switch/evict · 산출 밀도 state × src(§10-2).
-D15(09.29) — 단계(phase): circle → explore → expect → intro → create1 → create2 → review. 창작 전 단계는 seg 0. 타이머 값은 헤더(seg1_appear_ms 등)에서 읽는다.
+V1.0(09.29) — 단계(phase): explore → recall → briefing → create1 → hold → create2 → review. 창작 전 단계는 seg 0. 튜토리얼 원 · done 없음 · 구간 1은 진행자 종료 · canvas.new reason:seg1 · audio.unlock · pn_margin.
+   옛 로그(R-012 protocol:D15 · 그 이전)도 그대로 읽는다 — 헤더의 session_structure / protocol로 가른다.
 4단계 — lock.apply 재계산(p · p_norm · candidates · axis · value · alt) · done.appear/cap 시각 · 구간 순서 1→2→(3) · gen.set/rule.param · 규칙·난수 열 · 적기(음절 수 = count · abort ≤ 3자 · place target) · 이미지 손잡이 · mic.span · 잠금 뒤 slot.gone 접촉.
 의존  표준 라이브러리만
 """
@@ -25,7 +26,7 @@ from collections import Counter, defaultdict
 
 MAT = {"blank": "빈면", "sound": "소리", "image": "이미지"}
 GEN = {"hand": "손", "rule": "규칙", "random": "난수"}
-PHASE_KO = {"circle": "원", "explore": "① 탐색", "expect": "② 기대 회고", "intro": "③ 기능 소개", "create1": "구간 1", "create2": "구간 2", "review": "회고"}
+PHASE_KO = {"circle": "원", "explore": "탐색", "expect": "기대 회고", "intro": "기능 소개", "recall": "기대 회고", "briefing": "기능 소개", "create1": "구간 1", "hold": "구간 2 전", "create2": "구간 2", "review": "회고"}
 
 HEADER_REQUIRED = [
     "pid", "date", "build", "device", "os", "standalone", "viewport", "scale", "letterbox",
@@ -141,8 +142,8 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
     seg_starts = [e.get("seg") for e in events if e.get("type") == "seg.start"]
     out.append((seg_starts == sorted(seg_starts), f"seg.start 순서 {seg_starts}"))
     # seg 0 접촉은 노트를 남기지 않는다
-    seg0_notes = [a for a in adds if a.get("seg") == 0 and a.get("phase") not in ("explore", "intro")]
-    out.append((not seg0_notes, "튜토리얼 원 · 기대 회고 중에는 노트가 남지 않음 (탐색 · 소개의 노트는 phase로 구분)"))
+    seg0_notes = [a for a in adds if (a.get("seg") == 0 and a.get("phase") not in ("explore", "intro", "briefing")) or a.get("phase") == "hold"]
+    out.append((not seg0_notes, "멈춘 화면(기대 회고 · 구간 2 전)에서는 노트가 남지 않음 (탐색 · 소개의 노트는 phase로 구분)"))
     # 2단계 — note.edit prev · scope.set 값 · N2 · grid by · idle
     edits = [e for e in events if e.get("type") == "note.edit"]
     ok = all(len(e.get("ids", [])) == e.get("count") == len(e.get("prev", [])) == len(e.get("vals", [])) and e.get("field") in ("pos", "len") for e in edits)
@@ -308,7 +309,73 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
     out.append((all(e.get("from", 1) <= e.get("to", 0) and e.get("n", -1) >= 0 and e.get("gated_ms", -1) >= 0 for e in spans), f"mic.span {len(spans)}건 from ≤ to · n · gated_ms"))
     mic_notes = [a for a in adds if a.get("src") == "mic"]
     out.append((all(0 <= a["vals"][0].get("vel", -1) <= 1 for a in mic_notes if a.get("vals")), f"src:mic {len(mic_notes)}건 vel ∈ [0,1]"))
-    # D15 — 창작 전 단계
+    # V1.0 — 창작 전 단계 · 진행자 종료 · 소리 확인
+    if (header or {}).get("session_structure") == "d15":
+        ph = [e.get("phase") for e in events if e.get("type") == "phase.start"]
+        order = ["explore", "recall", "briefing"]
+        out.append((ph == [x for x in order if x in ph] and ph[:1] == ["explore"], f"창작 전 단계 순서 {ph}"))
+        unl = [e for e in events if e.get("type") == "audio.unlock"]
+        fl = next((e for e in events if e.get("type") == "session.flash"), None)
+        out.append((len(unl) == 1 and unl[0].get("by") == "facilitator" and bool(unl[0].get("wall")) and unl[0].get("seg") == -1 and (fl is None or unl[0].get("wall") <= fl.get("wall")), f"audio.unlock {len(unl)}건 — 플래시 전에 진행자가 (seg −1)"))
+        out.append((not any(e.get("type") in ("done", "done.appear") or e.get("target") == "slot:done" for e in events), "done 없음 (우 3)"))
+        s1 = next((e for e in events if e.get("type") == "seg.start" and e.get("seg") == 1), None)
+        if s1:
+            i1 = events.index(s1)
+            clears = [e for e in events[:i1] if e.get("type") == "canvas.new" and e.get("reason") == "seg1"]
+            out.append((len(clears) == 1 and clears[0].get("to") == s1.get("canvas"), "구간 1 앞에 화면 비우기 1회 (canvas.new reason:seg1)"))
+            if clears:
+                between = [e for e in events[events.index(clears[0]) : i1] if e.get("type") == "touch.down"]
+                out.append((all(not e.get("acted") and e.get("reason") == "wait" for e in between), f"비운 뒤 구간 1 시작 전 접촉 {len(between)}건 acted:false reason:wait"))
+            cv1 = s1.get("canvas")
+            carried = [a for a in adds if a.get("canvas") == cv1 and a.get("t", 0) < s1.get("t", 0)]
+            st = s1.get("state") or {}
+            out.append((not carried and st == {"mat": "blank", "grid": False, "gen": "hand"}, "구간 1은 빈 캔버스 · 초기 상태(빈면,OFF,손)에서 시작"))
+            e1 = next((e for e in events if e.get("type") == "seg.end" and e.get("seg") == 1), None)
+            if e1:
+                d = e1.get("t", 0) - s1.get("t", 0)
+                lim = int(header.get("seg1_len_ms", 600000))
+                out.append((e1.get("by") == "facilitator", f"구간 1 끝 by:{e1.get('by')} (진행자) · 길이 {d} ms · 목표 {lim} · 차이 {d - lim:+d}"))
+                i = events.index(e1)
+                follow = [e.get("type") for e in events[i : i + 9] if not ((e.get("type") in ("gen.set", "grid.on", "grid.off") and e.get("by") == "lock") or e.get("type") in ("idle", "image.select"))][:4]
+                out.append((follow == ["seg.end", "lock.apply", "snapshot", "canvas.new"], f"구간 1 끝 뒤 순서 {follow}"))
+                s2 = next((e for e in events if e.get("type") == "seg.start" and e.get("seg") == 2), None)
+                if s2 and header.get("seg2_gated"):
+                    hold = [e for e in events[i : events.index(s2)] if e.get("type") == "touch.down"]
+                    out.append((s2.get("by") == "facilitator" and all(not e.get("acted") and e.get("reason") == "hold" for e in hold), f"구간 2 시작 by:{s2.get('by')} · 그 전 접촉 {len(hold)}건 acted:false reason:hold · 사이 {s2.get('t', 0) - e1.get('t', 0)} ms"))
+                e2 = next((e for e in events if e.get("type") == "seg.end" and e.get("seg") == 2), None)
+                if s2 and e2:
+                    d2 = e2.get("t", 0) - s2.get("t", 0)
+                    lim2 = int(header.get("seg2_len_ms", 600000))
+                    out.append((d2 <= lim2 + 60 and (e2.get("by") != "timer" or abs(d2 - lim2) <= 60), f"구간 2 {d2} ms (길이 {lim2} · by:{e2.get('by')})"))
+        ex_s = next((e for e in events if e.get("type") == "phase.start" and e.get("phase") == "explore"), None)
+        ex_e = next((e for e in events if e.get("type") == "phase.end" and e.get("phase") == "explore"), None)
+        if ex_s and ex_e:
+            d = ex_e.get("t", 0) - ex_s.get("t", 0)
+            lim = int(header.get("seg0_len_ms", 240000))
+            ok = d <= lim + 60 and (ex_e.get("by") != "timer" or abs(d - lim) <= 60)
+            out.append((ok, f"자유 탐색 {d} ms (상한 {lim} · by:{ex_e.get('by')})"))
+        frozen = [e for e in events if e.get("type") == "touch.down" and e.get("phase") == "recall"]
+        out.append((all(not e.get("acted") and e.get("reason") == "recall" for e in frozen), f"기대 회고 중 접촉 {len(frozen)}건 acted:false reason:recall"))
+        steps = [e for e in events if e.get("type") == "intro.step"]
+        out.append((all("key" in e and isinstance(e.get("i"), int) and e.get("key") != "absent" for e in steps), f"intro.step {len(steps)}건 i · key"))
+        lk = next((e for e in events if e.get("type") == "lock.apply"), None)
+        if lk:
+            pn = lk.get("p_norm", {})
+            r = sorted((pn.get(a, 0) for a in lk.get("candidates", [])), reverse=True)
+            want = round(r[0] - r[1], 4) if len(r) >= 2 else None
+            got = lk.get("pn_margin")
+            out.append(((want is None and got is None) or (want is not None and got is not None and abs(want - got) < 1e-3), f"pn_margin {got} (재계산 {want}){' — 잠금 근거 약함' if isinstance(got, (int, float)) and got < 0.08 else ''}"))
+        mats = [a for a in adds if a.get("src") == "material"]
+        out.append((all(a.get("sound") in header.get("slots_sounds", []) for a in mats), f"src:material {len(mats)}건 sound ∈ slots_sounds {header.get('slots_sounds')}"))
+        sel = [e for e in events if e.get("type") == "image.select"]
+        out.append((all("id" in e and isinstance(e.get("on"), bool) for e in sel), f"image.select {len(sel)}건 id · on"))
+        szs = [e for e in events if e.get("type") == "image.size"]
+        out.append((all(e.get("corner") in ("nw", "ne", "sw", "se") for e in szs), f"image.size {len(szs)}건 corner"))
+        mic_n = [a for a in adds if a.get("src") == "mic"]
+        out.append(("mic_input" not in header.get("cuts", []) or not mic_n, f"mic_input 절단 — src:mic {len(mic_n)}건"))
+        pre_marks = [e for e in events if e.get("type") == "mark" and e.get("seg") == 0]
+        out.append((True, f"(참고) 창작 전 마킹 {len(pre_marks)}건 — F3에서 제외한다"))
+    # D15 (R-012 · 09.29 오전 빌드) — 옛 로그
     if (header or {}).get("protocol") == "D15":
         ph = [e.get("phase") for e in events if e.get("type") == "phase.start"]
         order = ["explore", "expect", "intro"]
@@ -490,6 +557,7 @@ def density(header: dict | None, events: list[dict]) -> dict:
 SLOT = 100
 BOTTOM_LEFT_X = [40, 164, 288, 412, 536, 660]
 BOTTOM_RIGHT_X = [854, 978, 1102, 1226]
+BOTTOM_RIGHT_X3 = [916, 1040, 1164]  # V1.0 — 우 3
 DRAWER_Y = [32, 168, 304]
 
 
@@ -497,7 +565,8 @@ def slot_rects(header: dict | None) -> list[tuple[str, int, int]]:
     if not header:
         return []
     out = []
-    for name, x in zip(list(header.get("slots_bottom", [])) + ["mark", "canvas.keep", "canvas.discard", "done"], BOTTOM_LEFT_X + BOTTOM_RIGHT_X):
+    right = BOTTOM_RIGHT_X3 if header.get("session_structure") == "d15" else BOTTOM_RIGHT_X
+    for name, x in zip(list(header.get("slots_bottom", [])) + ["mark", "canvas.keep", "canvas.discard", "done"], BOTTOM_LEFT_X + right):
         out.append((name, x, 904))
     for name, y in zip(header.get("slots_drawer", []), DRAWER_Y):
         out.append((f"mat.{name}", 30, y))
@@ -597,7 +666,7 @@ def pilot(header: dict | None, events: list[dict]) -> str:
             n = e["target"][5:]
             if n in ("mark", "canvas.keep", "canvas.discard", "done") and n not in first:
                 first[n] = mmss(e.get("t", 0))
-    L.append(f"[버튼 넷 첫 접촉] {first or '없음'}")
+    L.append(f"[세션 버튼 첫 접촉] {first or '없음'}")
 
     # radiusX · force
     forces = {e.get("force") for e in events if e.get("type") == "touch.down"}

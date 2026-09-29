@@ -32,26 +32,30 @@ export const SPREAD_DEFAULT = 0.5      // ☐ 난수 지터 (0–1)
 // ── 체류
 export const TAU = 10_000              // ☐ 정지 임계
 
-// ── 세션 타이머 (기준 = seg.start seg:1의 t)
-// D15(09.29) — 구간 1 10분 + 구간 2 10분. SPEC.md §2는 볼트 개정 반영 전까지 옛 값(480 000 · 900 000 · 420 000)이다
-export const SEG1_APPEAR = 300_000     // '여기까지' 등장 — ★가정: 상한의 절반(5분). 결정은 "구간 1 10분"만 정했다. 볼트에서 확정 필요
-export const SEG1_CAP = 600_000        // 구간 1 상한 (10분)
-export const SEG2_LEN = 600_000        // 구간 2 길이 (10분)
+// ── 세션 타이머 (기능 명세 V1.0 §5 · D15)
+// SPEC.md(개발 명세) §2는 볼트 개정 전까지 옛 값이다. 어긋나면 기능 명세 V1.0이 이긴다
+export const SEG0_LEN = 240_000        // 자유 탐색 4분 — 끝나면 자동으로 기대 회고(화면 동결)
+export const SEG1_LEN = 600_000        // 구간 1 10분 — 끝은 진행자가 말로 끊고 시트 [구간 1 종료]. 자동 종료 없음
+export const SEG2_LEN = 600_000        // 구간 2 10분 — 타이머 종료
+export const RECALL_GUIDE = 180_000    // 기대 회고 3분 — 시트 안내 시간(자동 전환 없음)
+export const BRIEFING_GUIDE = 420_000  // 기능 소개 7분 — 시트 안내 시간(자동 전환 없음)
+export const MARK_FLASH = 250          // 마킹 눌림 확인 — 버튼만 밝아지는 시간 (G10 개정)
+export const PN_MARGIN_WEAK = 0.08     // 잠금 근거 약함 문턱 (§6-1) — 분석용. 세션 중 판정은 바꾸지 않는다
+export const UI_IN_MS = 300            // 전체 UI가 나타나는 시간
 
-// ── 창작 전 단계 (D15 안 2) — 자유 탐색 → 기대 회고 → 기능 소개
-export const EXPLORE_LEN = 240_000     // 자유 탐색 4분 — 끝나면 자동으로 기대 회고(화면 동결)
-export const EXPECT_GUIDE = 180_000    // 기대 회고 3분 — 안내 시간(자동 전환 없음)
-export const INTRO_GUIDE = 180_000     // 기능 소개 3분 — 안내 시간(자동 전환 없음)
-export const PRESS_ACK = 300           // 우 4 눌림 확인 — 버튼이 밝아지는 시간 (D15 ③)
-export const FADE_IN = 3_000           // '여기까지' 페이드 인
+// ── 운영 방식 (★ 기능 명세가 비워 둔 곳 — R-013)
+/** 구간 1 종료 뒤 구간 2는 진행자가 시트에서 시작한다. 그 사이 구두 확인 · 구간 2 과제문. false면 곧바로 시작 */
+export const SEG2_GATED = true
+/** 기능 소개 중 화면에 문장 띠와 밝히기를 보인다. false면 진행자 낭독만(시트에 순서 표시) */
+export const BRIEFING_BANNER = true
 
 // ── 제어 요소 · 노트 · 이미지
 export const SLOT = 100                // ☐ 제어 요소 한 변
-export const NOTE_EDGE = 28            // 노트 오른쪽 끝 손잡이 폭
+export const NOTE_EDGE = 28            // 노트 양 끝 손잡이 폭 — 선택했을 때만 (V1.0 §3-2)
 export const IMG_DEFAULT = { w: 360, h: 240 } as const   // 3:2 고정
 export const IMG_MIN = { w: 180, h: 120 } as const
 export const IMG_MAX = { w: 1206, h: 804 } as const
-export const HANDLE = 48               // 이미지 손잡이 한 변
+export const HANDLE = 48               // 이미지 모서리 손잡이 한 변 — 선택했을 때만, 네 모서리
 
 // ── 칩 · 캔버스 목록 · 미리보기
 export const CHIP_MAX = 3
@@ -86,7 +90,7 @@ export const IDLE_LIST_MIN = 60_000    // 회고 모드 정지 목록 문턱
 
 // ── 운영 플래그 — 세션 전원이 같은 값이어야 한다 (§14-2 cuts · §11-1 lock_rule)
 /** 잘라낸 항목. 후보 순서 — mic_input · image_size · preview_loop · rule_slider · text_label */
-export const CUTS: readonly string[] = []
+export const CUTS: readonly string[] = ['mic_input'] // V1.0 §3 「할 수 있는 것 전부」에 마이크 입력이 없다 — 입력 채널을 자른다. 녹음 트랙은 남는다 (R-013)
 /** 자기 잠금 판정식. 'v0.2'면 원식이 실제 잠금이 되고 v0.3 결과가 alt로 간다 (§11-1) */
 export const LOCK_RULE: 'v0.3' | 'v0.2' = 'v0.3'
 
@@ -94,10 +98,6 @@ export const LOCK_RULE: 'v0.3' | 'v0.2' = 'v0.3'
 export const TAP_MOVE_PX = 8           // §5-2 탭·누르기 이동 상한
 export const TAP_MAX_MS = 300          // §5-2 탭 지속 상한 (이상이면 누르기)
 export const FLASH_FRAMES = 3          // §7 흰 플래시
-export const TUTORIAL_CENTER = { x: 763, y: 466 } as const   // §7 튜토리얼 원
-export const TUTORIAL_DIAMETER = 240
-export const TUTORIAL_NOTE = { pitch: 0.5, len: 400, vel: 0.6, tone: 0.5 } as const
-export const TUTORIAL_OUT_MS = 300     // §7 원이 사라지는 시간
 export const CHIP_H = 28               // §6-7 칩 한 줄 높이 (100 × 28)
 export const MIC_F0_LO = 82.41         // §9 E2 — 피치 추정 하한 (Hz)
 export const MIC_F0_HI = 1318.51       // §9 E6 — 상한

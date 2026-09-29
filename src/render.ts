@@ -4,11 +4,11 @@
  * 순서 — 영역 → 격자 → 이미지(노트 아래) → 노트 → 재생 헤드 → 캔버스 목록 → 슬롯(+미리보기) → 이미지 패널 → 끌기 잔상.
  * 격자 양자화(비파괴)는 noteRect(n, grid) 한 곳. 라벨·손잡이·슬라이더는 4단계.
  */
-import { W, H, TUTORIAL_CENTER, TUTORIAL_DIAMETER, SLOT, K_P, K_T, L, IMG_DEFAULT, HANDLE } from './constants'
+import { W, H, SLOT, K_P, K_T, L, IMG_DEFAULT, HANDLE } from './constants'
 import {
-  DRAWER, AXIS, SURFACE, BOTTOM, PANEL, SLIDER, slotRects, noteRect, panelRects, listRect, chipRects, labelRect, xOfOn, SLOT_LABEL, type Fit, type Rect,
+  DRAWER, AXIS, SURFACE, BOTTOM, PANEL, SLIDER, slotRects, noteRect, panelRects, soundRects, noteHandleRects, imageCornerRect, CORNERS, listRect, chipRects, labelRect, xOfOn, SLOT_LABEL, type Fit, type Rect,
 } from './layout'
-import type { Chip, Image, Label, Note, Seg, Slots } from './model'
+import type { Chip, Image, Label, Note, Seg, Slots, Vals } from './model'
 import { drawPreview, PREVIEW_STATIC_PHASE } from './preview'
 
 export interface Thumb {
@@ -36,8 +36,6 @@ export interface ReviewOverlay {
 export interface View {
   seg: Seg
   flash: boolean
-  /** 0–1. 튜토리얼 원 */
-  tutorialAlpha: number
   /** 0–1. 전체 UI */
   uiAlpha: number
   notes: readonly Note[]
@@ -45,14 +43,16 @@ export interface View {
   labels: readonly Label[]
   imageEls: ReadonlyMap<string, HTMLImageElement>
   selection: ReadonlySet<string>
+  /** 선택된 이미지 — 모서리 손잡이는 이것에만 (V1.0 §3-2) */
+  imageSel: string | null
+  /** 소리 목록의 칸에 그릴 값 */
+  soundVals: ReadonlyMap<string, readonly Vals[]>
   slots: Slots
   gone: ReadonlySet<string>
   /** 켜져 있는 슬롯 (grid ON · all ON · 현재 gen · 재생 중 play) */
   active: ReadonlySet<string>
-  doneVisible: boolean
-  doneAlpha: number
   grid: boolean
-  panelOpen: boolean
+  panelOpen: 'image' | 'sound' | null
   playFrom: number
   playPos: number | null
   list: readonly Thumb[]
@@ -69,7 +69,7 @@ export interface View {
   review: ReviewOverlay | null
   /** 준비 화면(seg −1)에만 작게 — 진행자가 빌드를 확인한다 */
   build: string
-  /** 방금 눌린 우 4 — 눌림 확인 (D15 ③) */
+  /** 방금 눌린 마킹 — 눌림 확인 (G10 개정) */
   pressed: ReadonlySet<string>
   /** 기능 소개 — 밝힐 자리. 나머지는 어둡게 (D15 안 2 ③) */
   spotlight: readonly Rect[] | null
@@ -90,7 +90,6 @@ const C = {
   note: '#a8a8a8',
   noteSel: '#ffffff',
   noteSelRing: 'rgba(255,255,255,0.9)',
-  circle: '#dcdcdc',
   gridMinor: 'rgba(255,255,255,0.05)',
   gridMajor: 'rgba(255,255,255,0.12)',
   head: 'rgba(255,255,255,0.75)',
@@ -144,18 +143,10 @@ export function draw(ctx: CanvasRenderingContext2D, fit: Fit, v: View): void {
     if (v.slider) drawSlider(ctx, v.slider.value)
     drawSlots(ctx, v)
     drawChips(ctx, v)
-    if (v.panelOpen) drawPanel(ctx, v)
+    if (v.panelOpen === 'image') drawPanel(ctx, v)
+    if (v.panelOpen === 'sound') drawSoundPanel(ctx, v)
     if (v.spotlight) drawSpotlight(ctx, v.spotlight)
     if (v.ghost) drawGhost(ctx, v.ghost)
-    ctx.globalAlpha = 1
-  }
-
-  if (v.tutorialAlpha > 0) {
-    ctx.globalAlpha = v.tutorialAlpha
-    ctx.fillStyle = C.circle
-    ctx.beginPath()
-    ctx.arc(TUTORIAL_CENTER.x, TUTORIAL_CENTER.y, TUTORIAL_DIAMETER / 2, 0, Math.PI * 2)
-    ctx.fill()
     ctx.globalAlpha = 1
   }
 }
@@ -225,33 +216,26 @@ function drawImageEl(ctx: CanvasRenderingContext2D, el: HTMLImageElement | undef
   ctx.drawImage(el, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h)
 }
 
-/** 이미지는 노트 아래. 나중에 놓은 것이 위. 손잡이는 작은 모서리 표시로 상시 (§6-8) */
+/** 이미지는 노트 아래. 나중에 놓은 것이 위. 손잡이는 선택된 이미지의 네 모서리에만 (V1.0 §3-2) */
 function drawImages(ctx: CanvasRenderingContext2D, images: readonly Image[], v: View): void {
   if (images.length === 0) return
   ctx.save()
   clipSurface(ctx)
   for (const im of images) {
     drawImageEl(ctx, v.imageEls.get(im.img), im)
-    // 손잡이 (D15 ④) — 사진 위에서도 보이게 어두운 바탕을 깐다. 옮기기 = 채운 사각형, 크기 = 빗금 셋. 글자 없음
-    const m = { x: im.x, y: im.y, w: HANDLE, h: HANDLE }
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    ctx.fillRect(m.x, m.y, m.w, m.h)
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.fillRect(m.x + 14, m.y + 14, HANDLE - 28, HANDLE - 28)
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+    if (v.review || im.id !== v.imageSel) continue
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
     ctx.lineWidth = 2
-    ctx.strokeRect(m.x + 1, m.y + 1, m.w - 2, m.h - 2)
-    if (!v.imageSizeCut) {
-      const z = { x: im.x + im.w - HANDLE, y: im.y + im.h - HANDLE, w: HANDLE, h: HANDLE }
+    ctx.strokeRect(im.x + 1, im.y + 1, im.w - 2, im.h - 2)
+    if (v.imageSizeCut) continue
+    // 사진 위에서도 보이게 어두운 바탕 + 흰 테두리. 글자 · 아이콘 없음
+    for (const k of CORNERS) {
+      const r = imageCornerRect(im, k)
       ctx.fillStyle = 'rgba(0,0,0,0.55)'
-      ctx.fillRect(z.x, z.y, z.w, z.h)
-      ctx.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2)
-      ctx.beginPath()
-      for (const d of [12, 22, 32]) {
-        ctx.moveTo(z.x + z.w - 8, z.y + z.h - 8 - d)
-        ctx.lineTo(z.x + z.w - 8 - d, z.y + z.h - 8)
-      }
-      ctx.stroke()
+      ctx.fillRect(r.x, r.y, r.w, r.h)
+      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2)
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.fillRect(r.x + HANDLE / 2 - 7, r.y + HANDLE / 2 - 7, 14, 14)
     }
   }
   ctx.restore()
@@ -263,14 +247,27 @@ function drawNotes(ctx: CanvasRenderingContext2D, notes: readonly Note[], v: Vie
   // 선택은 밝기 차이만으로는 안 보인다(PI-007) — 선택된 노트는 흰색 + 테두리, 나머지는 한 단계 어둡게
   for (const n of notes) {
     const r = noteRect(n, v.grid)
-    const sel = v.selection.has(n.id)
+    const sel = !v.review && v.selection.has(n.id)
     fillRect(ctx, r, sel ? C.noteSel : C.note)
     if (sel) {
       ctx.strokeStyle = C.noteSelRing
       ctx.lineWidth = 2
       ctx.strokeRect(r.x - 3, r.y - 3, r.w + 6, r.h + 6)
-      // 길이 손잡이 (D15 ④) — 선택된 노트의 오른쪽 끝에 어두운 세로 막대
-      if (r.w >= 14) fillRect(ctx, { x: r.x + r.w - 7, y: r.y + 2, w: 3, h: r.h - 4 }, '#2a2a2a')
+    }
+  }
+  // 손잡이는 노트 위에 — 선택된 노트의 양 끝 (V1.0 §3-2). 선택하지 않으면 보이지 않는다
+  if (!v.review) {
+    for (const n of notes) {
+      if (!v.selection.has(n.id)) continue
+      const r = noteRect(n, v.grid)
+      const hs = noteHandleRects(r)
+      for (const cx of [r.x, r.x + r.w]) {
+        const k: Rect = { x: cx - 5, y: hs.l.y + 2, w: 10, h: hs.l.h - 4 }
+        fillRect(ctx, k, '#ffffff')
+        ctx.strokeStyle = '#1a1a1a'
+        ctx.lineWidth = 2
+        ctx.strokeRect(k.x, k.y, k.w, k.h)
+      }
     }
   }
   ctx.restore()
@@ -384,9 +381,6 @@ function drawSlots(ctx: CanvasRenderingContext2D, v: View): void {
   const phase = v.previewStatic ? PREVIEW_STATIC_PHASE : v.previewPhase
   for (const s of slotRects(v.slots)) {
     if (v.gone.has(s.name)) continue // 빈 자리는 메우지 않는다 (§11-2)
-    const isDone = s.name === 'done'
-    if (isDone && !v.doneVisible) continue // 등장 전에는 자리만 비운다 (§3-2)
-    ctx.globalAlpha = base * (isDone ? v.doneAlpha : 1)
     const on = v.active.has(s.name)
     fillRect(ctx, s.rect, v.pressed.has(s.name) ? C.slotPressed : on ? C.slotFillActive : C.slotFill)
     ctx.strokeStyle = on ? C.slotLineActive : C.slotLine
@@ -418,6 +412,35 @@ function drawPanel(ctx: CanvasRenderingContext2D, v: View): void {
       continue
     }
     drawImageEl(ctx, v.imageEls.get(p.name.slice(6)), p.rect)
+  }
+}
+
+/** 소리 목록 — 칸마다 그 소리의 모양(시간 × 음고)을 작게. 글자 없음. absent 없음 */
+function drawSoundPanel(ctx: CanvasRenderingContext2D, v: View): void {
+  fillRect(ctx, PANEL, C.panel)
+  ctx.strokeStyle = C.panelLine
+  ctx.lineWidth = 1
+  ctx.strokeRect(PANEL.x + 0.5, PANEL.y + 0.5, PANEL.w - 1, PANEL.h - 1)
+  for (const p of soundRects(v.slots.sounds)) {
+    fillRect(ctx, p.rect, C.slotFill)
+    ctx.strokeStyle = C.slotLine
+    ctx.lineWidth = 2
+    ctx.strokeRect(p.rect.x + 1, p.rect.y + 1, p.rect.w - 2, p.rect.h - 2)
+    const vals = v.soundVals.get(p.name.slice(6)) ?? []
+    if (vals.length === 0) continue
+    // 세 칸이 같은 축척 — 가로 3 000 ms, 세로 음고 0.35–0.75
+    const T = 3000
+    const lo = 0.35
+    const hi = 0.75
+    const pad = 12
+    for (const n of vals) {
+      fillRect(ctx, {
+        x: p.rect.x + pad + (n.on / T) * (p.rect.w - pad * 2),
+        y: p.rect.y + pad + (1 - (n.pitch - lo) / (hi - lo)) * (p.rect.h - pad * 2) - 2,
+        w: Math.max(3, (n.len / T) * (p.rect.w - pad * 2)),
+        h: 4,
+      }, C.thumbNote)
+    }
   }
 }
 

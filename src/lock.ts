@@ -6,6 +6,7 @@
  *   pn[axis] = (p − 1/k) / (1 − 1/k)
  *   used     = 구간 1에 그 축 전이 ≥ 1
  *   candidates = used인 축 (없으면 전부) · axis = argmax pn (동점 gen > mat > grid) · value = argmax dwell
+ *   pn_margin = 후보 축의 pn 1위 − 2위 (기록만 — 0.08 미만이면 분석에서 "잠금 근거 약함")
  *   alt = 원식(v0.2) — argmax p over 전 축 (기록만). lock_rule이 v0.2면 역할이 바뀐다
  * tools/chain.py가 같은 식을 dwell에서 다시 계산해 대조한다.
  */
@@ -30,6 +31,8 @@ export interface LockResult extends LockPick {
   candidates: LockAxis[]
   p: Record<LockAxis, number>
   p_norm: Record<LockAxis, number>
+  /** 후보 축 가운데 pn 1위 − 2위. 후보가 하나면 null (V1.0 §6-1) */
+  pn_margin: number | null
   alt: LockPick
   dwell: Dwell
   T_active: number
@@ -74,7 +77,10 @@ export function compute(input: LockInput, rule: LockRule = 'v0.3'): LockResult {
   v02.axis = pickAxis(p, [...AXES])
   v02.value = argmaxValue(dwell[v02.axis]).value
 
+  const ranked = [...candidates].map((a) => pn[a]).sort((a, b) => b - a)
+  const pn_margin = ranked.length >= 2 ? r4((ranked[0] as number) - (ranked[1] as number)) : null
+
   const main = rule === 'v0.3' ? v03 : v02
   const alt = rule === 'v0.3' ? v02 : v03
-  return { ...main, candidates, p, p_norm: pn, alt, dwell, T_active }
+  return { ...main, candidates, p, p_norm: pn, pn_margin, alt, dwell, T_active }
 }

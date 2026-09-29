@@ -15,11 +15,11 @@
 | §6-3 | `ops/grid.ts` | 토글 · **비파괴**(저장은 원값, 렌더·재생·규칙 열에서만 양자화) |
 | §6-4 | `ops/gen.ts` | hand/rule/random · 규칙·난수는 열 한 건 `note.add {count}` · PRNG 시드 `hash(seed, seq)` · 슬라이더 `rule.param` |
 | §6-5 | `ops/play.ts` | `axis` 탭 = `playFrom` · 재생 슬롯 = 시작/정지 · `heard[]` · `matches_scope` |
-| §6-6 | `ops/material.ts` | 탭 = 열람 `mat.peek` · 끌어 놓기 = 채택 `mat.adopt`(캔버스 첫 회만) + `note.add src:material` / `image.place` |
+| §6-6 | `ops/material.ts` | **V1.0 §3** 소리도 이미지처럼 슬롯 탭 → 목록 → 칸을 끌어 놓기 · 탭 = 열람 `mat.peek` · 끌어 놓기 = 채택 `mat.adopt`(캔버스 첫 회만) + `note.add src:material` / `image.place` |
 | §6-7 | `ops/text.ts` | 빈 면 슬롯 → 입력 칸 → 칩(3) → 면에 놓으면 음절 = 노트 + 라벨 · 띠에 놓으면 라벨만 · `text.abort`(≤3자) · `image.absent` |
-| §6-8 | `ops/image.ts` | 손잡이 둘(move 좌상 · size 우하 48×48) · 3:2 고정 · 면 밖 = 제거 · 노트 아래에 그림 |
+| §6-8 | `ops/image.ts` | **V1.0 §3** 탭 = 선택(`image.select`) → 네 모서리 48×48 = 크기 · 가운데 끌기 = 옮기기 · 3:2 고정 · 면 밖 = 제거 · 노트 아래에 그림 |
 | §6-9 | `ops/canvas.ts` | keep/discard/switch/evict · 캔버스별 `mat·playFrom·selection` · 떠나는 캔버스 스냅샷 |
-| §6-10 | `ops/buttons.ts` | `mark`(스냅샷 · **09.29 D15 — 눌림 확인 300 ms만, 그 밖의 화면 변화 없음**) · `done`(구간 1 종료) |
+| §6-10 | `ops/buttons.ts` | `mark`(스냅샷 · **V1.0 §3-1 — 버튼만 250 ms 밝아진다**, 그 밖의 화면 · 소리 변화 없음) · `done`은 V1.0에서 삭제 |
 
 ## 열린 항목
 

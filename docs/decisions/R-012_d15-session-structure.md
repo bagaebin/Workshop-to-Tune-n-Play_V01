@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | 날짜 | 2026-09-29 |
-| 상태 | 승인(사용자 — 볼트 결정 요청 §6 답변) · **볼트 개발 명세 반영 대기** |
+| 상태 | **대체됨** — [R-013](R-013_v1.0-gaps.md)(기능 명세 V1.0). 아래는 09.29 오전 빌드(`7a8c540`)의 기록 |
 | SPEC | §2 · §6-8 · §6-10 · §7 · §7-1 · §10-2 · §10-3 |
 | 코드 | `src/session.ts` · `src/intro.ts` · `src/facilitator.ts` · `src/render.ts` · `src/log.ts` · `src/constants.ts` · `tools/chain.py` |
 

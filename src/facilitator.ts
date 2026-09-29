@@ -1,9 +1,10 @@
 /**
- * facilitator.ts — 진행자 시트 (SPEC §7-1)
+ * facilitator.ts — 진행자 시트 (기능 명세 V1.0 §4 · SPEC §7-1)
  *
- * 준비(pid · 마이크 · 체크리스트 · 잠금식 · [시작]) · 창작 전(D15 안 2 — [자유 탐색 시작] → 기대 회고 목록 → [기능 소개 시작] → 과제문 → [구간 1 시작]) ·
- * 세션 중(구간 · 경과 · [구간 2 조기 종료] · [비상 정지]) ·
- * 회고(마킹 목록 → 재생 · 미사용 목록 · 정지 목록 · 버튼 인지 · [내보내기] · [재시도]) · 복구 표시 · [새 세션으로].
+ * 준비(pid · 마이크 · 체크리스트 · 잠금식 · [소리 확인] · [시작]) ·
+ * 창작 전(자유 탐색 → 기대 회고 목록 → [기능 소개 시작] → [화면 비우기] → 과제문 → [구간 1 시작]) ·
+ * 창작(구간 1 경과 · [구간 1 종료] → 잠긴 것 · 구두 확인 · 구간 2 과제문 · [구간 2 시작] · [구간 2 조기 종료] · [비상 정지]) ·
+ * 회고(마킹 목록 → 재생 · 미사용 둘 · 정지 목록 · 버튼 인지 · [내보내기] · [재시도]) · 복구 표시 · [새 세션으로].
  * DOM 오버레이라 열린 동안 캔버스 접촉은 닿지 않는다. 모든 조작은 session이 facilitator {action}으로 남긴다.
  */
 import type { Checks, Status, ReviewData, ReviewMark, ExpectRow } from './session'
@@ -15,11 +16,15 @@ import * as update from './update'
 export interface FacApi {
   status(): Status
   start(pid: string, checks: Checks): Promise<void>
-  startExplore(): void
+  soundCheck(): Promise<boolean>
   endExploreEarly(): void
   startIntro(): void
   expectData(): Promise<{ slots: ExpectRow[]; acts: Array<{ label: string; count: number }> }>
+  clearWorkspace(): void
   startSeg1(): void
+  endSeg1Now(): void
+  startSeg2(): void
+  lockName(axis: string, value: string): string
   endSeg2Early(): void
   emergencyStop(): void
   exportNow(): Promise<ExportResult>
@@ -45,6 +50,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
   let lastExport: ExportResult | null = null
   let micMsg = ''
   let updateMsg = ''
+  let soundMsg = ''
   let statusEl: HTMLElement | null = null
   let meterEl: HTMLElement | null = null
   let meterThrEl: HTMLElement | null = null
@@ -55,7 +61,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
   let lockRule: LockRule = 'v0.3'
   let pid = ''
 
-  const phaseName: Record<string, string> = { prep: '준비', circle: '튜토리얼 원', explore: '① 자유 탐색', expect: '② 기대 회고', intro: '③ 기능 소개', create1: '구간 1', create2: '구간 2 잠금', review: '회고' }
+  const phaseName: Record<string, string> = { prep: '준비', explore: '자유 탐색', recall: '기대 회고', briefing: '기능 소개', create1: '구간 1', hold: '구간 1 끝 · 구간 2 전', create2: '구간 2 잠금', review: '회고' }
   const segName = (s: number) => ({ '-1': '준비', '0': '창작 전', '1': '구간 1 자유', '2': '구간 2 잠금', '3': '회고' })[String(s)] ?? String(s)
   const mmss = (ms: number) => {
     const s = Math.floor(ms / 1000)
@@ -187,7 +193,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
       input.style.cssText = 'width:100%;padding:10px;font:inherit;font-size:18px;background:#111;color:#fff;border:1px solid #555;border-radius:6px;box-sizing:border-box;'
       input.addEventListener('input', () => {
         pid = input.value.trim().toUpperCase()
-        startBtn.disabled = pid.length === 0
+        startBtn.disabled = pid.length === 0 || !api.status().audioReady
         startBtn.style.opacity = startBtn.disabled ? '0.4' : '1'
       })
       panel.append(input)
@@ -222,10 +228,18 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
         await update.reloadFresh()
       }))
       if (updateMsg) panel.append(p(updateMsg))
-      const startBtn = button('시작 → 플래시 → 튜토리얼', async () => {
+      panel.append(h('소리 확인'))
+      panel.append(p('기기를 건네기 전 마지막 동작. 누르면 짧은 소리가 하나 난다. 누르지 않으면 [시작]이 눌리지 않는다 — 첫 접촉이 무음이 되지 않게.'))
+      panel.append(button(st.audioReady ? '소리 확인 ✔ (다시 듣기)' : '소리 확인', async () => {
+        const ok = await api.soundCheck()
+        soundMsg = ok ? '소리가 났으면 준비됐다. 안 들렸으면 무음 모드 · 볼륨을 확인한다' : '오디오를 열지 못했다 — 다시 누른다'
+      }))
+      if (soundMsg) panel.append(p(soundMsg))
+      panel.append(p('[시작]을 누르면 플래시 뒤 곧바로 전체 화면이 나오고 자유 탐색 4분이 시작된다.\n말 — "이제 이걸 4분 동안 편하게 만져 보세요. 뭘 만들지 않으셔도 됩니다." (소리가 난다는 말도 하지 않는다)'))
+      const startBtn = button('시작 → 플래시 → 자유 탐색 (4분)', async () => {
         await api.start(pid, { guided_access: checks.guided_access ?? false, silent_mode_off: checks.silent_mode_off ?? false, lock_rule: lockRule })
         close()
-      }, { disabled: pid.length === 0 })
+      }, { disabled: pid.length === 0 || !st.audioReady })
       panel.append(startBtn)
       return
     }
@@ -236,49 +250,61 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
     panel.append(statusEl)
     updateStatus()
 
-    // ── 창작 전 (D15 안 2) — 원 → ① 자유 탐색 4 → ② 기대 회고 3 → ③ 기능 소개 3 → 과제문 → 구간 1
-    if (st.phase === 'circle') {
-      panel.append(p('튜토리얼 원 — 어떻게 닿아도 같은 소리. 충분히 만져 본 뒤 누른다.\n말 — "이제 화면이 나옵니다. 편하게 만져 보세요." (그 외 설명 없음)'))
-      panel.append(button('① 자유 탐색 시작 (4분)', () => {
-        api.startExplore()
-        close()
-      }))
-    }
+    // ── 창작 전 (V1.0 §4) — 자유 탐색 4 → 기대 회고 3 → 기능 소개 7 → 과제문 1 → 구간 1
     if (st.phase === 'explore') {
-      panel.append(p('① 자유 탐색 — 개입 0. 질문받으면 "편하신 대로 하세요"만. 4분에 화면이 멈추고 기대 회고로 넘어간다.'))
+      panel.append(p('자유 탐색 — 개입 0. 질문받으면 "편하신 대로 하세요"만. 4분에 화면이 멈추고 기대 회고로 넘어간다.'))
       panel.append(button('탐색 종료 → 기대 회고', () => {
         api.endExploreEarly()
       }, { small: true }))
     }
-    if (st.phase === 'expect') {
-      panel.append(h('② 기대 회고 (3분)'))
-      panel.append(p('화면은 멈춰 있다. 아래 순서대로 하나씩 가리키며 묻는다 — "이건 뭘 할 것 같았어요?"\n누른 것과 안 누른 것 모두. 맞다 · 틀리다를 말하지 않는다. 답은 기록지에.'))
+    if (st.phase === 'recall') {
+      panel.append(h('기대 회고 (3분)'))
+      panel.append(p('화면은 멈춰 있다. 슬롯을 하나씩 가리키며 묻는다. 안 누른 것을 먼저.\n(안 누른 것) "이건 안 눌러보셨는데, 뭐라고 생각하셨어요?"\n(누른 것) "이건 뭘 할 것 같았어요?"\n답을 말 그대로 받아 적는다. 맞다 · 틀리다를 말하지 않는다.'))
       expectEl = document.createElement('div')
       panel.append(expectEl)
       void loadExpect()
-      panel.append(button('③ 기능 소개 시작 (3분)', () => {
+      panel.append(button('기능 소개 시작 (7분)', () => {
         api.startIntro()
         close()
       }))
     }
-    if (st.phase === 'intro') {
-      panel.append(h('③ 기능 소개'))
-      panel.append(p('화면 아래 안내 띠의 문장을 그대로 읽는다. 용도는 말하지 않는다.\n진행자가 시연하지 않는다 — 참여자가 직접 한 번씩 눌러 보고 [다음].'))
-      panel.append(p(st.introDone ? '소개 끝. 과제문을 읽고 [구간 1 시작].' : `진행 ${st.introStep ? `${st.introStep.i + 1} / ${st.introStep.n}` : '—'}`))
+    if (st.phase === 'briefing' && !st.cleared) {
+      panel.append(h('기능 소개 (7분)'))
+      panel.append(p('말 — "이제 이게 뭘 하는 건지 하나씩 알려드릴게요. 직접 한 번씩 눌러보시면 됩니다."\n스크립트 4/5장의 문장을 그대로(화면 띠에 같은 문장이 나온다). 동작만, 용도는 말하지 않는다. 시연하지 않고 참여자 손으로.\n소개하지 않는다 — 이미지 패널의 「여기 없다」 칸 · 마킹을 언제 누르는지.'))
+      panel.append(p(`순서 (이 참여자)\n${st.introOrder.map((n, i) => `${i + 1}. ${n}`).join('\n')}`))
+      panel.append(p(st.introDone ? '소개 끝.' : `진행 ${st.introStep ? `${st.introStep.i + 1} / ${st.introStep.n}` : '—'}`))
     }
     if (st.seg === 0) {
-      panel.append(h('과제문 (전원 동일)', 14))
-      panel.append(p('"떠오르는 것을 여기서 만들어 보세요. 정답도, 끝나는 기준도 없습니다. 주변에 있는 것들은 쓰셔도 되고 안 쓰셔도 됩니다."'))
-      panel.append(button(st.phase === 'intro' ? '구간 1 시작 (10분)' : '구간 1 시작 — 남은 단계를 건너뛴다', () => {
+      const skipping = st.phase !== 'briefing'
+      panel.append(h('구간 1 (1 + 10분)', 14))
+      panel.append(p('① "화면을 새로 비우겠습니다. 이제부터 10분이에요." → [화면 비우기]\n② 과제문 — "떠오르는 것을 만들어 보세요. 정답도, 끝나는 기준도 없습니다. 완성하지 않으셔도 됩니다."\n③ [구간 1 시작]'))
+      panel.append(button(st.cleared ? '화면 비움 ✔' : skipping ? '화면 비우기 — 남은 단계를 건너뛴다' : '화면 비우기', () => {
+        api.clearWorkspace()
+      }, { disabled: st.cleared, small: skipping }))
+      panel.append(button('구간 1 시작 (10분)', () => {
         api.startSeg1()
         close()
-      }, { small: st.phase !== 'intro' }))
+      }, { small: skipping && !st.cleared }))
     }
-    if (st.seg === 1) {
-      panel.append(p('구간 1 — 5분에 「여기까지」 등장, 10분 상한. 참여자가 누르면 구간 2로 넘어가고 잠금이 적용된다.\n2분 이상 정지 시 한 번만 "지금 무슨 생각 하고 계세요?"'))
+    if (st.phase === 'create1') {
+      panel.append(p('구간 1 — 개입 0. 10분이 되면 말로 끊는다 — "여기까지 할게요." 그리고 [구간 1 종료].\n화면은 자동으로 끝나지 않는다. 2분 이상 정지 시 한 번만 "지금 무슨 생각 하고 계세요?"'))
+      panel.append(button('구간 1 종료 → 잠금', () => {
+        api.endSeg1Now()
+      }))
     }
-    if (st.seg === 2) {
-      panel.append(p(`잠금 ${st.lock ?? '—'} · "방금 만드신 것을, 이것 없이 다시 해보세요"`))
+    if (st.phase === 'hold') {
+      const [axis, value] = (st.lock ?? '=').split('=')
+      panel.append(h('구간 1 끝', 14))
+      panel.append(p('끊은 직후 — "지금 멈추라고 해서 멈춘 건가요, 하실 만큼 하신 건가요?" (답을 기록지에)'))
+      panel.append(h(`잠긴 것 — ${api.lockName(axis ?? '', value ?? '')}`, 15))
+      panel.append(p(`${st.lock ?? '—'} · 기록지에 적는다\n"이번에는 ○○만 빼고 해보시겠어요? 나머지는 그대로예요. 10분입니다."`))
+      panel.append(button('구간 2 시작 (10분)', () => {
+        api.startSeg2()
+        close()
+      }))
+    }
+    if (st.phase === 'create2') {
+      panel.append(p(`잠금 ${st.lock ?? '—'} · 개입 0. 10분 뒤 화면이 멈추고 회고로 넘어간다.`))
       panel.append(button('구간 2 조기 종료 → 회고', () => {
         api.endSeg2Early()
       }))
@@ -326,17 +352,19 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
       reviewEl?.append(button(`★ ${i + 1}  ${mmss(m.t)}  캔버스 #${m.canvas} · 노트 ${m.notes.length}${m.n_before !== null ? ` · 앞 조작 ${m.n_before}` : ''}`, () => api.reviewPlay(m), { small: true }))
     })
     if (d.marks.length) reviewEl.append(button('화면을 마지막 상태로', () => api.reviewClear(), { small: true }))
-    reviewEl.append(h('미사용', 14))
-    reviewEl.append(p(`접촉 0인 슬롯: ${d.unusedSlots.length ? d.unusedSlots.join(' · ') : '없음'}\n채택 0인 재료: ${d.unadopted.length ? d.unadopted.join(' · ') : '없음'}\n칩 ${d.chipsMade}개 중 놓은 것 ${d.chipsPlaced}`))
+    reviewEl.append(h('미사용 — 탐색 (몰랐다)', 14))
+    reviewEl.append(p(`탐색 4분 동안 접촉 0: ${d.unusedExplore.length ? d.unusedExplore.join(' · ') : '없음'}`))
+    reviewEl.append(h('미사용 — 창작 (알고도 안 썼다)', 14))
+    reviewEl.append(p(`구간 1 · 2에서 접촉 0: ${d.unusedCreate.length ? d.unusedCreate.join(' · ') : '없음'}\n채택 0인 재료: ${d.unadopted.length ? d.unadopted.join(' · ') : '없음'}\n칩 ${d.chipsMade}개 중 놓은 것 ${d.chipsPlaced}`))
     reviewEl.append(h('정지 (≥ 60 s)', 14))
     reviewEl.append(p(d.idles.length ? d.idles.map((x) => `${mmss(x.t - x.dur)} → ${mmss(x.t)} (${Math.round(x.dur / 1000)} s)`).join('\n') : '없음'))
-    reviewEl.append(h('우 4 첫 접촉', 14))
-    const names: Record<string, string> = { mark: '마킹', 'canvas.keep': '남기고 새로', 'canvas.discard': '지우고 새로', done: '여기까지' }
+    reviewEl.append(h('우 3 첫 접촉 (창작 구간)', 14))
+    const names: Record<string, string> = { mark: '마킹', 'canvas.keep': '남기고 새로', 'canvas.discard': '지우고 새로' }
     reviewEl.append(p(Object.entries(d.firstTouch).map(([k, t]) => `${names[k] ?? k}: ${t === null ? '—' : mmss(t)}`).join(' · ')))
     if (d.lock) {
       const l = d.lock
       reviewEl.append(h('잠금', 14))
-      reviewEl.append(p(`${String(l.rule)} → ${String(l.axis)}=${String(l.value)} · alt ${JSON.stringify(l.alt)}\np ${JSON.stringify(l.p)}\np_norm ${JSON.stringify(l.p_norm)}\ncandidates ${JSON.stringify(l.candidates)} · T_active ${String(l.T_active)} ms`))
+      reviewEl.append(p(`${String(l.rule)} → ${String(l.axis)}=${String(l.value)} · alt ${JSON.stringify(l.alt)}\np ${JSON.stringify(l.p)}\np_norm ${JSON.stringify(l.p_norm)}\ncandidates ${JSON.stringify(l.candidates)} · T_active ${String(l.T_active)} ms\npn_margin ${String(l.pn_margin)}${typeof l.pn_margin === 'number' && l.pn_margin < 0.08 ? ' — 잠금 근거 약함 (분석에서 표시)' : ''}`))
     }
   }
 
@@ -347,15 +375,14 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
     if (!expectEl) return
     expectEl.replaceChildren()
     const sec = (ms: number | null) => (ms === null ? '' : ` · 첫 접촉 ${mmss(ms)}`)
-    const groups: Array<[string, ExpectRow[]]> = [
-      ['아래 왼쪽 여섯 (왼→오)', d.slots.slice(0, 6)],
-      ['아래 오른쪽 셋', d.slots.slice(6, 9)],
-      ['왼쪽 서랍 셋 (위→아래)', d.slots.slice(9)],
-    ]
-    for (const [title, rows] of groups) {
-      expectEl.append(h(title, 13))
-      expectEl.append(p(rows.map((r, i) => `${i + 1}. ${r.label} — ${r.count ? `${r.count}회${sec(r.first)}` : '안 누름'}`).join('\n')))
-    }
+    const where = (i: number): string => (i < 6 ? `아래 왼쪽 ${i + 1}번째` : i < 9 ? `아래 오른쪽 ${i - 5}번째` : `왼쪽 서랍 위에서 ${i - 8}번째`)
+    const rows = d.slots.map((r, i) => ({ ...r, where: where(i) }))
+    const untouched = rows.filter((r) => r.count === 0)
+    const touched = rows.filter((r) => r.count > 0)
+    expectEl.append(h(`먼저 — 안 누른 것 ${untouched.length}`, 13))
+    expectEl.append(p(untouched.length ? untouched.map((r) => `${r.where} — ${r.label}`).join('\n') : '없음'))
+    expectEl.append(h(`다음 — 누른 것 ${touched.length}`, 13))
+    expectEl.append(p(touched.length ? touched.map((r) => `${r.where} — ${r.label} · ${r.count}회${sec(r.first)}`).join('\n') : '없음'))
     expectEl.append(h('면 위에서 한 것', 13))
     expectEl.append(p(d.acts.map((a) => `${a.label} ${a.count}`).join(' · ')))
   }
@@ -373,8 +400,8 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
       `캔버스 #${st.canvas} (전체 ${st.canvases} · 목록 ${st.listed}) · 노트 ${st.notes} · 이미지 ${st.images} · 마킹 ${st.marks}`,
       `재료 ${st.mat} · 격자 ${st.grid ? 'ON' : 'OFF'} · 생성 ${st.gen} · ${st.playing ? '▶ 재생 중' : '■ 정지'}`,
     ]
-    if (st.exploreRemain !== null) parts.push(`① 자유 탐색 남음 ${mmss(st.exploreRemain)}`)
-    if (st.elapsedSeg1 !== null && st.seg === 1) parts.push(`구간 1 경과 ${mmss(st.elapsedSeg1)} / 10:00 · 여기까지 ${st.doneVisible ? '등장' : '5:00에'}`)
+    if (st.exploreRemain !== null) parts.push(`자유 탐색 남음 ${mmss(st.exploreRemain)}`)
+    if (st.elapsedSeg1 !== null && st.phase === 'create1') parts.push(`구간 1 경과 ${mmss(st.elapsedSeg1)} / 10:00${st.elapsedSeg1 >= 600_000 ? ' — 끊을 시간' : ''}`)
     if (st.remainSeg2 !== null) parts.push(`구간 2 남음 ${mmss(st.remainSeg2)}`)
     parts.push(`${st.recording ? '● 녹음 중' : '○ 녹음 없음'} · 입력 채널 ${st.micInput ? 'ON' : 'OFF'} · 잠금식 ${st.lockRule}`)
     statusEl.textContent = parts.join('\n')

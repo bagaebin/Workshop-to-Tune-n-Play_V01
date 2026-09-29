@@ -54,6 +54,11 @@ export async function resume(): Promise<void> {
   if (c.state !== 'running') await c.resume()
 }
 
+/** 오디오가 열려 있는가 — 준비 화면 [소리 확인] 뒤에만 true (V1.0 §4-1) */
+export function isRunning(): boolean {
+  return ctx !== null && ctx.state === 'running'
+}
+
 /** 준비 화면에서 무음 버퍼 1회 — 컨텍스트 워밍 */
 export function warm(): void {
   const c = ensure()

@@ -1,22 +1,23 @@
 /**
- * session.ts — 세션 흐름 (SPEC §7) · 모듈 배선
+ * session.ts — 세션 흐름 (기능 명세 V1.0 §4 · SPEC §7) · 모듈 배선
  *
- * seg −1 준비 → [시작] → 흰 플래시 3프레임(t = 0) → seg 0 튜토리얼 원 → [구간 1 시작] → seg 1 자유
- *   → +SEG1_APPEAR done.appear(FADE_IN) → done(by user|cap) → seg.end 1 → 잠금 계산·적용 → snapshot seg → canvas.new lock → seg.start 2
- *   → +SEG2_LEN seg.end 2 (시트로 조기 종료 가능) → seg 3 회고(UI 동결 · 접촉 acted:false)
- * 4단계 — 생성 방식·슬라이더 · 적기·칩·라벨 · 타이머·done · 잠금 · 이미지 손잡이 · 마이크 입력 채널 · 회고 지원.
+ * seg −1 준비 → [소리 확인] → [시작] → 흰 플래시 3프레임(t = 0)
+ *   → seg 0  explore 자유 탐색(SEG0_LEN) → recall 기대 회고(동결) → briefing 기능 소개 → [화면 비우기] canvas.new reason:seg1
+ *   → seg 1  create1 (SEG1_LEN · 진행자가 말로 끊고 시트 [구간 1 종료]) → seg.end 1 → 잠금 계산·적용 → snapshot seg → canvas.new lock
+ *   → hold(동결 · 구두 확인 · 구간 2 과제문) → 시트 [구간 2 시작] → seg 2 create2 (+SEG2_LEN seg.end 2)
+ *   → seg 3 회고(UI 동결 · 접촉 acted:false)
+ * 튜토리얼 원 · 「여기까지」(done)는 없다 (V1.0 §4-1 · §2-1).
  */
 import {
-  FLASH_FRAMES, TUTORIAL_NOTE, TUTORIAL_OUT_MS, VEL_FIXED, TONE_FIXED, LEN_DEFAULT,
-  W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG1_APPEAR, SEG1_CAP, SEG2_LEN, FADE_IN, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR, TEXT_ABORT_CHARS,
-  EXPLORE_LEN, PRESS_ACK,
+  FLASH_FRAMES, UI_IN_MS, VEL_FIXED, TONE_FIXED, LEN_DEFAULT,
+  W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG0_LEN, SEG1_LEN, SEG2_LEN, MARK_FLASH, SEG2_GATED, BRIEFING_BANNER, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR, TEXT_ABORT_CHARS,
 } from './constants'
 import {
-  computeFit, toVirtual, shuffledSlots, hitTest, pitchOfY, inFacRect, inRect, panelBlocks, sliderValue, slotRects, resolveLabels,
-  SURFACE, AXIS, PANEL, BOTTOM_RIGHT, quantPitch, type Fit,
+  computeFit, toVirtual, shuffledSlots, hitTest, pitchOfY, inRect, panelBlocks, panelRects, soundRects, sliderValue, slotRects, resolveLabels,
+  SURFACE, AXIS, PANEL, BOTTOM_RIGHT, quantPitch, type Fit, type Corner,
 } from './layout'
 import {
-  INITIAL_STATE, SEG_OF, newCanvas, matOf, bumpId, resetIds, type Phase, type Canvas, type Session, type Seg, type Src, type Vals, type Image, type Label, type Chip, type Note, type Gen, type LockAxis,
+  INITIAL_STATE, SEG_OF, PHASE_ALIAS, newCanvas, matOf, bumpId, resetIds, type Phase, type Canvas, type Session, type Seg, type Src, type Vals, type Image, type Label, type Chip, type Note, type Gen, type LockAxis,
 } from './model'
 import { attach, type DownInfo, type MoveInfo, type Gesture } from './input'
 import { draw, type View, type Ghost, type ReviewOverlay } from './render'
@@ -51,15 +52,19 @@ export interface Status {
   phase: Phase
   /** 자유 탐색 남은 ms */
   exploreRemain: number | null
-  /** 기능 소개 진행 */
+  /** 기능 소개 진행 · 지금 단계 이름 · 전체 순서(진행자용) */
   introStep: { i: number; n: number } | null
   introDone: boolean
+  introOrder: string[]
+  /** 구간 1 앞의 화면 비우기가 끝났는가 */
+  cleared: boolean
+  /** [소리 확인]을 눌러 오디오가 열렸는가 */
+  audioReady: boolean
   pid: string
   /** seg.start seg:1 기준 경과 ms. 구간 1 전이면 null */
   elapsedSeg1: number | null
   /** 구간 2 남은 ms */
   remainSeg2: number | null
-  doneVisible: boolean
   canvas: number
   canvases: number
   listed: number
@@ -91,7 +96,10 @@ export interface ReviewMark {
 
 export interface ReviewData {
   marks: ReviewMark[]
-  unusedSlots: string[]
+  /** 탐색 4분 동안 접촉 0 — 몰랐다 (V1.0 §7-1 unused.explore) */
+  unusedExplore: string[]
+  /** 구간 1 · 2에서 접촉 0 — 알고도 안 썼다 (unused.create) */
+  unusedCreate: string[]
   unadopted: string[]
   chipsMade: number
   chipsPlaced: number
@@ -112,7 +120,7 @@ function freshSession(): Session {
     canvases: [newCanvas(1)],
     current: 0,
     chips: [],
-    slots: { bottom: [], drawer: [], panel: [] },
+    slots: { bottom: [], drawer: [], panel: [], sounds: [] },
     cuts: [...CUTS],
   }
 }
@@ -126,19 +134,24 @@ let flashLeft = 0
 let pendingChecks: Checks | null = null
 let lockRule: LockRule = LOCK_RULE
 let seg1At: number | null = null
-/** 전체 UI가 처음 나타난 시각 — 원이 사라지고 UI가 한 번에 나타나는 전환의 기준 */
+/** 전체 UI가 처음 나타난 시각 — 플래시 뒤 UI가 한 번에 나타나는 전환의 기준 */
 let uiPerf: number | null = null
+/** [소리 확인]을 누른 시각 (ISO). 헤더 뒤에 audio.unlock으로 남긴다 */
+let unlockWall: string | null = null
+/** 구간 1 앞의 화면 비우기가 끝났다 — 구간 1 시작까지 화면은 멈춰 있다 */
+let cleared = false
+/** 선택된 이미지 — 손잡이가 보인다. 캔버스를 떠나면 풀린다 */
+let imageSel: string | null = null
 let exploreAt: number | null = null
 let introFinished = false
 let introLastStep = 0
-/** 우 4 눌림 확인 (D15 ③) — 이름 → 밝기가 끝나는 시각 */
+/** 마킹 눌림 확인 (G10 개정) — 이름 → 밝기가 끝나는 시각 */
 const acks = new Map<string, number>()
 let seg2At: number | null = null
-let doneAppearAt: number | null = null
 let opsInSeg = 0
 let marks = 0
 let resumed = false
-let panelOpen = false
+let panelOpen: 'image' | 'sound' | null = null
 let ghost: Ghost | null = null
 let params = gen.defaultParams()
 let lockBlankPending = false
@@ -148,6 +161,8 @@ const gone = new Set<string>()
 const held = new Map<number, { h: audio.Handle; at: number }>()
 const drags = new Map<number, notes.Edit>()
 const imageDrags = new Map<number, imageOps.ImageEdit>()
+/** 선택되지 않은 이미지 위에서 시작한 접촉 — 탭이면 선택, 누르기·끌기면 노트 (D4) */
+const imageTouches = new Map<number, { id: string; x: number; y: number }>()
 const sliderDrags = new Map<number, { name: 'step' | 'spread'; prev: number }>()
 const closedInput = new Set<number>()
 const labelDrags = new Map<number, labelOps.LabelEdit>()
@@ -156,20 +171,31 @@ let openSheet: () => void = () => {}
 const cur = (): Canvas => sess.canvases[sess.current] as Canvas
 const cut = (name: string): boolean => sess.cuts.includes(name)
 
-/** 개발 전용 — `?fast`로 열면 타이머를 초 단위로 줄인다 (등장 5 s · 상한 10 s · 구간 2 10 s · 탐색 8 s). 빌드에는 없다 (R-004) */
+/** 개발 전용 — `?fast`로 열면 타이머를 초 단위로 줄인다 (탐색 8 s · 구간 1 10 s · 구간 2 10 s). 빌드에는 없다 (R-004) */
 const FAST = import.meta.env.DEV && new URLSearchParams(location.search).has('fast')
-const T_APPEAR = FAST ? 5_000 : SEG1_APPEAR
-const T_CAP = FAST ? 10_000 : SEG1_CAP
+const T_SEG1 = FAST ? 10_000 : SEG1_LEN
 const T_SEG2 = FAST ? 10_000 : SEG2_LEN
-const T_EXPLORE = FAST ? 8_000 : EXPLORE_LEN
+const T_EXPLORE = FAST ? 8_000 : SEG0_LEN
 
 function setPhase(p: Phase): void {
   sess.phase = p
   sess.seg = SEG_OF[p]
 }
 
-/** 참여자 조작이 동작하는 단계 — 전체 UI가 살아 있다 */
-const uiLive = (): boolean => sess.phase === 'explore' || sess.phase === 'intro' || sess.phase === 'create1' || sess.phase === 'create2'
+/** 참여자 조작이 동작하는 단계 — 전체 UI가 살아 있다. 화면을 비운 뒤 구간 1 시작까지는 멈춘다 */
+const uiLive = (): boolean =>
+  sess.phase === 'explore' || (sess.phase === 'briefing' && !cleared) || sess.phase === 'create1' || sess.phase === 'create2'
+
+/** 멈춘 화면의 접촉에 남기는 이유 (V1.0 §4-3 reason:'recall') */
+function frozenReason(): string | null {
+  if (sess.phase === 'recall') return 'recall'
+  if (sess.phase === 'briefing' && cleared) return 'wait'
+  if (sess.phase === 'hold') return 'hold'
+  if (sess.phase === 'review') return 'review'
+  return null
+}
+
+const openRects = () => (panelOpen === 'sound' ? soundRects(sess.slots.sounds) : panelRects(sess.slots.panel))
 
 log.setContext(() => ({ seg: sess.seg, phase: sess.phase, canvas: cur().n, state: { ...sess.state } }))
 
@@ -192,15 +218,16 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
       return toVirtual(fit, cx - r.left, cy - r.top)
     },
     target: (x, y) => {
-      if (sess.phase === 'circle') return inFacRect(x, y) || fit.oy + y * fit.s <= 60 && fit.ox + x * fit.s <= 60 ? 'none' : 'surface' // 튜토리얼 — 어디를 닿아도 같다 (N4). 진행자 모서리만 예외
       return hitTest(x, y, {
         slots: sess.slots,
         notes: cur().notes,
         gone,
-        doneVisible: sess.seg === 1 && doneAppearAt !== null,
+        selection: cur().selection,
+        imageSel,
         grid: sess.state.grid,
         panelOpen,
         panel: sess.slots.panel,
+        sounds: sess.slots.sounds,
         images: cur().images,
         list: canvasOps.listOrder,
         chips: sess.chips,
@@ -210,7 +237,7 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
       })
     },
     actionable: (t) => {
-      if (!(sess.phase === 'circle' || uiLive())) return false // 준비 · 기대 회고 · 회고 — 접촉은 기록만
+      if (!uiLive()) return false // 준비 · 기대 회고 · 대기 · 회고 — 접촉은 기록만
       if (t === 'none' || t.startsWith('slot.gone')) return false
       if (t.startsWith('label:') && !labelOps.isAxisLabel(cur(), t.slice(6))) return false // 면 위 라벨은 노트를 따라간다 (R-010)
       if (lockReason(t)) return false
@@ -219,7 +246,7 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
     lockReason,
     blocked: (x, y) => {
       if (!uiLive()) return false
-      if (panelOpen && panelBlocks(sess.slots.panel, x, y)) return true
+      if (panelOpen && panelBlocks(openRects(), x, y)) return true
       const covered = text.coveredFromClientY()
       if (covered === null) return false
       const clientY = canvasEl.getBoundingClientRect().top + fit.oy + y * fit.s
@@ -244,20 +271,14 @@ function tickTimers(): void {
     endExplore('timer')
     return
   }
-  if (sess.seg === 1 && seg1At !== null) {
-    const el = log.now() - seg1At
-    if (doneAppearAt === null && el >= T_APPEAR) {
-      doneAppearAt = log.now()
-      log.log('done.appear', {})
-    }
-    if (el >= T_CAP) endSeg1('cap')
-  } else if (sess.seg === 2 && seg2At !== null && log.now() - seg2At >= T_SEG2) {
-    endSeg2('timer')
-  }
+  // 구간 1은 자동으로 끝나지 않는다 — 진행자가 말로 끊고 시트에서 끝낸다 (V1.0 §4-5)
+  if (sess.phase === 'create2' && seg2At !== null && log.now() - seg2At >= T_SEG2) endSeg2('timer')
 }
 
-/** 잠금 위반 — slot.gone · 구간 2에서 채택 전 surface (§11-2) */
+/** 작동하지 않는 이유 — 멈춘 화면(recall · wait · hold · review) · 잠금 위반(slot.gone · 구간 2에서 채택 전 surface, §11-2) */
 function lockReason(target: string): string | null {
+  const fr = frozenReason()
+  if (fr) return fr
   if (target.startsWith('slot.gone')) return 'lock'
   if (sess.seg === 2 && lockBlankPending && target === 'surface') return 'lock'
   return null
@@ -273,8 +294,23 @@ function resize(): void {
 }
 
 // ── 진행자 조작 (§7-1). 모든 조작은 facilitator {action}
+/** [소리 확인] — 준비 화면에서 진행자가 누른다. 오디오를 열고 짧은 노트 하나. 이것 없이는 [시작]이 눌리지 않는다 (V1.0 §4-1) */
+/** 이번 세션을 위해 [소리 확인]을 눌렀고 오디오가 열려 있다 — 세션마다 다시 누른다 */
+const audioReady = (): boolean => unlockWall !== null && audio.isRunning()
+
+export async function soundCheck(): Promise<boolean> {
+  audio.ensure()
+  await audio.resume()
+  audio.warm()
+  if (!audio.isRunning()) return false
+  audio.play({ on: 0, pitch: 0.5, len: 400, vel: 0.6, tone: TONE_FIXED })
+  unlockWall = new Date().toISOString()
+  return true
+}
+
 export async function start(pid: string, checks: Checks): Promise<void> {
   if (sess.seg !== -1) return
+  if (!audioReady()) return // 빠뜨림을 사람 기억에 맡기지 않는다
   sess.pid = pid
   sess.seed = pid
   sess.slots = shuffledSlots(pid)
@@ -326,11 +362,15 @@ function headerFields(wall: string): Record<string, unknown> {
     lock_rule: lockRule,
     text_abort_chars: TEXT_ABORT_CHARS,
     cuts: sess.cuts,
-    protocol: 'D15', // 탐색 → 기대 회고 → 기능 소개 → 창작
-    explore_ms: T_EXPLORE,
-    seg1_appear_ms: T_APPEAR,
-    seg1_cap_ms: T_CAP,
+    slots_sounds: sess.slots.sounds,
+    session_structure: 'd15', // 탐색 → 기대 회고 → 기능 소개 → 창작 (V1.0 §7)
+    spec: 'V1.0',
+    seg0_len_ms: T_EXPLORE,
+    seg1_len_ms: T_SEG1,
     seg2_len_ms: T_SEG2,
+    seg2_gated: SEG2_GATED,
+    briefing_banner: BRIEFING_BANNER,
+    mark_flash_ms: MARK_FLASH,
     dev_fast: FAST || undefined,
     guided_access: pendingChecks?.guided_access ?? false,
     silent_mode_off: pendingChecks?.silent_mode_off ?? false,
@@ -344,29 +384,42 @@ function onFlashStart(): void {
   log.setT0(sess.t0)
   mic.startRecording() // 녹음 트랙은 플래시부터 (§9)
   log.writeHeader(headerFields(wall))
-  setPhase('circle')
-  log.log('session.flash', { wall })
+  log.log('session.flash', { wall }) // 아직 seg −1
+  log.log('audio.unlock', { by: 'facilitator', at: 'seg-1', wall: unlockWall })
   log.log('facilitator', { action: 'start' })
+  // 튜토리얼 원은 없다 — 플래시 뒤 곧바로 전체 화면, 자유 탐색 (V1.0 §4-1 · §4-2)
+  setPhase('explore')
+  exploreAt = log.now()
+  uiPerf = performance.now()
+  opsInSeg = 0
+  log.log('phase.start', { phase: 'explore', by: 'facilitator' })
+  startMicInput()
 }
 
-// ── 창작 전 단계 (D15 안 2) — 원 → 자유 탐색 → 기대 회고 → 기능 소개 → (과제문) → 구간 1
+// ── 창작 전 단계 (V1.0 §4) — 자유 탐색 → 기대 회고 → 기능 소개 → (화면 비우기 · 과제문) → 구간 1
 
 function quiet(): void {
   const cv = cur()
   if (play.isPlaying()) play.stop(cv)
   if (text.isOpen()) text.closeInput(false, () => undefined)
-  panelOpen = false
+  panelOpen = null
   ghost = null
+  imageSel = null
   for (const id of [...held.keys()]) releaseHeld(id)
   drags.clear()
   imageDrags.clear()
+  imageTouches.clear()
   sliderDrags.clear()
   labelDrags.clear()
 }
 
-/** 작업 공간을 비운다 — 탐색·소개에서 만든 것은 창작으로 넘어가지 않는다. 떠나는 캔버스는 스냅샷으로 남는다 */
-function resetWorkspace(reason: 'intro' | 'create'): void {
+/**
+ * 화면 비우기 — 탐색·소개에서 만든 것은 구간 1로 넘어가지 않는다 (V1.0 §4-2). canvas.new reason:'seg1'.
+ * 떠나는 캔버스는 스냅샷으로만 남고 목록에 들어가지 않는다. 목록 · 칩 · 상태(빈면 · OFF · 손) · 규칙 값도 처음으로.
+ */
+function clearForSeg1(): void {
   quiet()
+  intro.hide()
   const from = cur()
   log.snapshot('phase', from)
   const n = sess.canvases.reduce((m, c) => Math.max(m, c.n), 0) + 1
@@ -376,19 +429,16 @@ function resetWorkspace(reason: 'intro' | 'create'): void {
   sess.chips = []
   sess.state = { ...INITIAL_STATE }
   params = gen.defaultParams()
-  log.log('workspace.reset', { reason, from: from.n, to: n })
+  cleared = true
+  log.log('canvas.new', { from: from.n, to: n, reason: 'seg1' })
 }
 
-/** ① 자유 탐색 — 전체 화면 공개, 과제문 없음, 개입 0 */
-export function startExplore(): void {
-  if (sess.phase !== 'circle') return
-  log.log('facilitator', { action: 'explore.start' })
-  setPhase('explore')
-  exploreAt = log.now()
-  uiPerf = performance.now()
-  opsInSeg = 0
-  log.log('phase.start', { phase: 'explore', by: 'facilitator' })
-  startMicInput()
+/** 시트 [화면 비우기] — "화면을 새로 비우겠습니다." 참여자가 비는 장면을 본다 */
+export function clearWorkspace(): void {
+  if (sess.seg !== 0 || cleared) return
+  log.log('facilitator', { action: 'workspace.clear' })
+  if (sess.phase === 'explore') endExplore('facilitator')
+  clearForSeg1()
 }
 
 function endExplore(by: 'timer' | 'facilitator'): void {
@@ -396,8 +446,8 @@ function endExplore(by: 'timer' | 'facilitator'): void {
   quiet()
   log.snapshot('phase', cur())
   log.log('phase.end', { phase: 'explore', by })
-  setPhase('expect') // ② 기대 회고 — 화면은 그대로, 접촉은 기록만
-  log.log('phase.start', { phase: 'expect', by })
+  setPhase('recall') // 기대 회고 — 화면은 그대로, 접촉은 기록만
+  log.log('phase.start', { phase: 'recall', by })
 }
 
 export function endExploreEarly(): void {
@@ -405,23 +455,22 @@ export function endExploreEarly(): void {
   endExplore('facilitator')
 }
 
-/** ③ 기능 소개 — 튜토리얼 페이지. 빈 작업 공간에서, 참여자 손으로 */
+/** 기능 소개 — 탐색에서 만든 화면 그대로, 참여자 손으로 (V1.0 §4-4) */
 export function startIntro(): void {
   if (sess.phase === 'explore') endExplore('facilitator')
-  if (sess.phase !== 'expect' && sess.phase !== 'circle') return
-  log.log('facilitator', { action: 'intro.start' })
-  if (sess.phase === 'expect') log.log('phase.end', { phase: 'expect', by: 'facilitator' })
-  if (uiPerf === null) uiPerf = performance.now()
-  resetWorkspace('intro')
-  setPhase('intro')
+  if (sess.phase !== 'recall') return
+  log.log('facilitator', { action: 'briefing.start' })
+  log.log('phase.end', { phase: 'recall', by: 'facilitator' })
+  setPhase('briefing')
   introFinished = false
-  log.log('phase.start', { phase: 'intro', by: 'facilitator' })
-  startMicInput()
+  introLastStep = 0
+  log.log('phase.start', { phase: 'briefing', by: 'facilitator' })
   showIntro(0)
 }
 
 function showIntro(at: number): void {
-  const steps = intro.buildSteps(sess.slots, { mic: mic.isInputOn() })
+  const steps = intro.buildSteps(sess.slots)
+  if (!BRIEFING_BANNER) return
   intro.show(
     fit,
     steps,
@@ -437,17 +486,17 @@ function showIntro(at: number): void {
   )
 }
 
-/** 과제문 낭독 뒤 — 구간 1. 어느 창작 전 단계에서든 넘어갈 수 있다(단계를 건너뛰면 로그에 그대로 남는다) */
+/** 과제문 낭독 뒤 — 구간 1. 화면을 비우지 않았으면 여기서 비운다. 어느 창작 전 단계에서든 넘어갈 수 있다(건너뛴 단계는 로그에 그대로 남는다) */
 export function startSeg1(): void {
   if (sess.seg !== 0) return
   log.log('facilitator', { action: 'seg1.start' })
   if (sess.phase === 'explore') endExplore('facilitator')
+  if (!cleared) clearForSeg1()
   intro.hide()
-  if (sess.phase === 'expect' || sess.phase === 'intro') log.log('phase.end', { phase: sess.phase, by: 'facilitator' })
-  if (sess.phase !== 'circle') resetWorkspace('create')
+  log.log('phase.end', { phase: sess.phase, by: 'facilitator' })
   setPhase('create1')
+  cleared = false
   seg1At = log.now()
-  if (uiPerf === null) uiPerf = performance.now()
   opsInSeg = 0
   log.log('seg.start', { seg: 1, by: 'facilitator' })
   startMicInput()
@@ -466,7 +515,7 @@ function startMicInput(): void {
     },
     onNote: (n) => {
       if (!micSpan || !uiLive()) return
-      if (sess.phase === 'intro' && intro.current()?.key !== 'mic') return // 소개 중 말소리가 노트가 되지 않게 — 마이크 단계에서만
+      if (sess.phase === 'briefing') return // 소개 중 말소리가 노트가 되지 않게
       const cv = cur()
       const on = Math.round(micSpan.from + (n.onsetAt - micSpan.startPerf))
       if (on >= L || cv.n !== micSpan.canvasN) return // L에 닿으면 span은 곧 닫힌다
@@ -491,27 +540,43 @@ function nextNoteId(): string {
   return notes.newId()
 }
 
-// ── 구간 전환 (§7)
-function endSeg1(by: 'user' | 'cap'): void {
-  if (sess.seg !== 1) return
-  const cv = cur()
-  if (play.isPlaying()) play.stop(cv)
-  if (text.isOpen()) text.closeInput(false, () => undefined)
-  panelOpen = false
-  ghost = null
-  log.log('done', { by, since_appear: doneAppearAt === null ? null : log.now() - doneAppearAt })
+// ── 구간 전환 (V1.0 §4-5 · SPEC §7)
+/** 구간 1 끝 — 진행자가 말로 끊고 시트에서 누른다. 잠금이 곧바로 적용되고, 구간 2는 시트 [구간 2 시작]에서 (SEG2_GATED) */
+function endSeg1(by: 'facilitator'): void {
+  if (sess.phase !== 'create1') return
+  quiet()
   log.closeActivity() // 마지막 간격을 닫는다 — τ를 넘으면 idle이 seg.end 앞에 남는다
-  log.log('seg.end', { seg: 1, by: by === 'cap' ? 'timer' : 'user' })
+  log.log('seg.end', { seg: 1, by })
   const res = lockCompute(log.getDwell(), lockRule)
-  setPhase('create2')
-  seg2At = log.now()
+  setPhase('hold')
   opsInSeg = 0
   log.log('lock.apply', { ...res }) // 판정 기록 → 그로 인한 전이(gen.set · grid.* by:lock) → snapshot seg → canvas.new lock
   applyLock(res)
   sess.lock = { axis: res.axis, value: res.value }
   canvasOps.keep(sess, 'lock') // snapshot reason:seg → canvas.new reason:lock
   if (sess.lock.axis === 'mat' && sess.lock.value === 'blank') lockBlankPending = true
-  log.log('seg.start', { seg: 2, by: by === 'cap' ? 'timer' : 'user' })
+  if (!SEG2_GATED) beginSeg2('timer')
+}
+
+export function endSeg1Now(): void {
+  if (sess.phase !== 'create1') return
+  log.log('facilitator', { action: 'seg1.end' })
+  endSeg1('facilitator')
+}
+
+function beginSeg2(by: 'facilitator' | 'timer'): void {
+  if (sess.phase !== 'hold') return
+  setPhase('create2')
+  seg2At = log.now()
+  opsInSeg = 0
+  log.log('seg.start', { seg: 2, by })
+}
+
+/** 구두 확인과 구간 2 과제문 뒤 — 시트 [구간 2 시작] */
+export function startSeg2(): void {
+  if (sess.phase !== 'hold') return
+  log.log('facilitator', { action: 'seg2.start' })
+  beginSeg2('facilitator')
 }
 
 /** §11-2 — 잠긴 것은 사라진다. 빈 자리는 메우지 않는다 */
@@ -531,13 +596,12 @@ function applyLock(res: LockResult): void {
 
 function endSeg2(by: 'timer' | 'facilitator'): void {
   if (sess.seg !== 2) return
-  const cv = cur()
-  if (play.isPlaying()) play.stop(cv)
-  if (text.isOpen()) text.closeInput(false, () => undefined)
-  panelOpen = false
-  ghost = null
-  log.closeActivity()
-  log.log('seg.end', { seg: 2, by })
+  const started = sess.phase === 'create2'
+  quiet()
+  if (started) {
+    log.closeActivity()
+    log.log('seg.end', { seg: 2, by })
+  }
   setPhase('review')
   mic.stopInput()
   void mic.stopRecording() // 녹음은 회고 모드 진입까지 (§9)
@@ -553,8 +617,7 @@ export function emergencyStop(): void {
   if (sess.seg < 1 || sess.seg === 3) return
   log.log('facilitator', { action: 'emergency_stop' })
   if (sess.seg === 1) {
-    const cv = cur()
-    if (play.isPlaying()) play.stop(cv)
+    quiet()
     log.closeActivity()
     log.log('seg.end', { seg: 1, by: 'facilitator' })
     setPhase('review')
@@ -587,16 +650,19 @@ export async function abandon(): Promise<void> {
   seg1At = null
   uiPerf = null
   seg2At = null
-  doneAppearAt = null
   exploreAt = null
   introFinished = false
   introLastStep = 0
+  cleared = false
+  imageSel = null
+  unlockWall = null
+  imageTouches.clear()
   acks.clear()
   intro.hide()
   opsInSeg = 0
   marks = 0
   resumed = false
-  panelOpen = false
+  panelOpen = null
   ghost = null
   review = null
   micSpan = null
@@ -618,10 +684,12 @@ export function status(): Status {
     exploreRemain: sess.phase === 'explore' && exploreAt !== null ? Math.max(0, T_EXPLORE - (log.now() - exploreAt)) : null,
     introStep: intro.progress(),
     introDone: introFinished,
+    introOrder: sess.slots.bottom.length ? intro.buildSteps(sess.slots).map((x) => intro.STEP_NAME[x.key] ?? x.key) : [],
+    cleared,
+    audioReady: audioReady(),
     pid: sess.pid,
     elapsedSeg1: seg1At === null ? null : log.now() - seg1At,
-    remainSeg2: sess.seg === 2 && seg2At !== null ? Math.max(0, T_SEG2 - (log.now() - seg2At)) : null,
-    doneVisible: doneAppearAt !== null,
+    remainSeg2: sess.phase === 'create2' && seg2At !== null ? Math.max(0, T_SEG2 - (log.now() - seg2At)) : null,
     canvas: cv.n,
     canvases: sess.canvases.length,
     listed: canvasOps.listOrder.length,
@@ -659,7 +727,7 @@ export async function reviewData(): Promise<ReviewData> {
   const snaps = new Map<string, log.Line>()
   for (const e of ev) if (e.type === 'snapshot') snaps.set(String(e.id), e)
   for (const e of ev) {
-    if (e.type !== 'mark') continue
+    if (e.type !== 'mark' || !(e.seg === 1 || e.seg === 2)) continue // 창작 전 마킹은 집계하지 않는다
     const s = snaps.get(String(e.snapshot))
     if (!s) continue
     marksList.push({
@@ -672,26 +740,33 @@ export async function reviewData(): Promise<ReviewData> {
       n_before: typeof e.n_before === 'number' ? e.n_before : null,
     })
   }
-  const touched = new Set<string>()
-  const firstTouch: Record<string, number | null> = { mark: null, 'canvas.keep': null, 'canvas.discard': null, done: null }
+  // 미사용은 둘로 나눈다 — 탐색에서 안 만진 것(몰랐다) · 창작에서 안 쓴 것(알고도 안 썼다) (V1.0 §7-1)
+  const touchedExplore = new Set<string>()
+  const touchedCreate = new Set<string>()
+  const firstTouch: Record<string, number | null> = { mark: null, 'canvas.keep': null, 'canvas.discard': null }
   for (const e of ev) {
     if (e.type !== 'touch.down') continue
     const t = String(e.target)
-    if (t.startsWith('slot:')) {
-      const name = t.slice(5)
-      touched.add(name)
+    if (!t.startsWith('slot:')) continue
+    const name = t.slice(5)
+    if (e.phase === 'explore') touchedExplore.add(name)
+    if (e.seg === 1 || e.seg === 2) {
+      touchedCreate.add(name)
       if (name in firstTouch && firstTouch[name] === null) firstTouch[name] = Number(e.t)
     }
   }
   const allSlots = slotRects(sess.slots).map((s) => s.name)
-  const unusedSlots = allSlots.filter((s) => !touched.has(s))
-  const adopted = new Set(ev.filter((e) => e.type === 'mat.adopt').map((e) => String(e.mat)))
+  const ko = (n: string): string => SLOT_NAME_KO[n] ?? n
+  const unusedExplore = allSlots.filter((n) => !touchedExplore.has(n)).map(ko)
+  const unusedCreate = allSlots.filter((n) => !touchedCreate.has(n) && !gone.has(n)).map(ko)
+  const adopted = new Set(ev.filter((e) => e.type === 'mat.adopt' && (e.seg === 1 || e.seg === 2)).map((e) => String(e.mat)))
   const unadopted = ['sound', 'image'].filter((m) => !adopted.has(m))
-  const chipsMade = ev.filter((e) => e.type === 'text.commit' && e.source === 'chip').length
-  const chipsPlaced = ev.filter((e) => e.type === 'text.place').length
+  const inCreate = (e: log.Line): boolean => e.seg === 1 || e.seg === 2
+  const chipsMade = ev.filter((e) => inCreate(e) && e.type === 'text.commit' && e.source === 'chip').length
+  const chipsPlaced = ev.filter((e) => inCreate(e) && e.type === 'text.place').length
   const idles = ev.filter((e) => e.type === 'idle' && Number(e.dur) >= IDLE_LIST_MIN).map((e) => ({ t: Number(e.t), dur: Number(e.dur) }))
   const lockLine = ev.find((e) => e.type === 'lock.apply') ?? null
-  return { marks: marksList, unusedSlots, unadopted, chipsMade, chipsPlaced, idles, firstTouch, lock: lockLine }
+  return { marks: marksList, unusedExplore, unusedCreate, unadopted, chipsMade, chipsPlaced, idles, firstTouch, lock: lockLine }
 }
 
 export interface ExpectRow {
@@ -707,7 +782,14 @@ export interface ExpectRow {
 const SLOT_NAME_KO: Readonly<Record<string, string>> = {
   grid: '격자', 'gen.hand': '손', 'gen.rule': '규칙', 'gen.random': '난수', play: '재생', all: '전체',
   'mat.blank': '빈 면(적기)', 'mat.sound': '소리 재료', 'mat.image': '이미지',
-  mark: '마킹', 'canvas.keep': '남기고 새로', 'canvas.discard': '지우고 새로', done: '여기까지',
+  mark: '마킹', 'canvas.keep': '남기고 새로', 'canvas.discard': '지우고 새로',
+}
+
+/** 잠긴 것을 진행자가 읽을 말로 — 구간 2 과제문의 ○○ 자리 */
+export function lockName(axis: string, value: string): string {
+  if (axis === 'gen') return SLOT_NAME_KO[`gen.${value}`] ?? value
+  if (axis === 'mat') return value === 'blank' ? '빈 면에서 바로 시작하기 (재료를 먼저 놓아야 한다)' : (SLOT_NAME_KO[`mat.${value}`] ?? value)
+  return value === 'on' ? '격자 (꺼진 채 고정)' : '격자 끄기 (켜진 채 고정)'
 }
 
 /** ② 기대 회고 자료 — 자유 탐색에서 무엇을 눌렀고 무엇을 안 눌렀나. 화면 배치 순서대로 */
@@ -716,7 +798,6 @@ export async function expectData(): Promise<{ slots: ExpectRow[]; acts: Array<{ 
   const ev = lines.filter((l) => l.phase === 'explore')
   const t0 = Number(lines.find((l) => l.type === 'phase.start' && l.phase === 'explore')?.t ?? 0)
   const rows: ExpectRow[] = slotRects(sess.slots)
-    .filter((s) => s.name !== 'done')
     .map((s) => ({ name: s.name, label: SLOT_NAME_KO[s.name] ?? s.name, count: 0, first: null }))
   const byName = new Map(rows.map((r) => [r.name, r]))
   for (const e of ev) {
@@ -736,13 +817,14 @@ export async function expectData(): Promise<{ slots: ExpectRow[]; acts: Array<{ 
     { label: '노트 옮기기·길이', count: n((e) => e.type === 'note.edit') },
     { label: '노트 지우기(밖으로)', count: n((e) => e.type === 'note.remove') },
     { label: '띠 탭(재생 시작점)', count: n((e) => e.type === 'play.seek') },
+    { label: '소리 들어 보기', count: n((e) => e.type === 'mat.peek' && e.mat === 'sound' && typeof e.id === 'string') },
     { label: '소리 재료 놓기', count: n((e) => e.type === 'note.add' && e.src === 'material') },
     { label: '이미지 놓기', count: n((e) => e.type === 'image.place') },
+    { label: '이미지 선택', count: n((e) => e.type === 'image.select' && e.on === true) },
     { label: '이미지 옮기기·크기·제거', count: n((e) => e.type === 'image.move' || e.type === 'image.size' || e.type === 'image.remove') },
     { label: '"여기 없다" 슬롯', count: n((e) => e.type === 'touch.down' && e.target === 'panel:absent') },
     { label: '적기(확정)', count: n((e) => e.type === 'text.commit') },
     { label: '칩 놓기', count: n((e) => e.type === 'text.place') },
-    { label: '마이크 노트', count: n((e) => e.type === 'note.add' && e.src === 'mic') },
     { label: '작동하지 않은 접촉', count: n((e) => e.type === 'touch.down' && e.acted === false && !(Number(e.x) < 80 && Number(e.y) < 80)) },
   ]
   return { slots: rows, acts }
@@ -777,15 +859,16 @@ export async function tryResume(): Promise<boolean> {
     bottom: [...((h.slots_bottom as string[] | undefined) ?? shuffledSlots(sess.pid).bottom.slice(0, 6)), ...BOTTOM_RIGHT],
     drawer: (h.slots_drawer as string[] | undefined) ?? shuffledSlots(sess.pid).drawer,
     panel: (h.slots_panel as string[] | undefined) ?? shuffledSlots(sess.pid).panel,
+    sounds: (h.slots_sounds as string[] | undefined) ?? shuffledSlots(sess.pid).sounds,
   }
   date = r.date
   replay(r.events)
   const gap = log.resume(r)
-  if (sess.phase !== 'prep' && sess.phase !== 'circle') uiPerf = performance.now() - TUTORIAL_OUT_MS // 전환은 이미 끝난 것으로
+  if (sess.phase !== 'prep') uiPerf = performance.now() - UI_IN_MS // 전환은 이미 끝난 것으로
   resumed = true
   log.log('session.resume', { gap_ms: gap })
   if (uiLive()) startMicInput()
-  if (sess.phase === 'intro' && !introFinished) showIntro(introLastStep)
+  if (sess.phase === 'briefing' && !introFinished && !cleared) showIntro(introLastStep)
   return true
 }
 
@@ -812,10 +895,11 @@ function replay(events: log.Line[]): void {
   let currentN = 1
   seg1At = null
   seg2At = null
-  doneAppearAt = null
   exploreAt = null
   introFinished = false
   introLastStep = 0
+  cleared = false
+  imageSel = null
   opsInSeg = 0
   marks = 0
   gone.clear()
@@ -913,6 +997,16 @@ function replay(events: log.Line[]): void {
         cv.playFrom = Number(e.at)
         break
       case 'canvas.new': {
+        if (e.reason === 'seg1') {
+          // 화면 비우기 — 떠난 캔버스는 목록에 들어가지 않는다. 목록 · 칩 · 규칙 값도 처음으로
+          canvasOf(Number(e.to))
+          currentN = Number(e.to)
+          list.length = 0
+          chips.length = 0
+          params = gen.defaultParams()
+          cleared = true
+          break
+        }
         const from = canvasOf(Number(e.from))
         from.kept = true
         if (!list.includes(from.n)) list.push(from.n)
@@ -961,11 +1055,11 @@ function replay(events: log.Line[]): void {
         break
       case 'seg.start':
         opsInSeg = 0
-        if (e.seg === 1) seg1At = Number(e.t)
+        if (e.seg === 1) {
+          seg1At = Number(e.t)
+          cleared = false
+        }
         if (e.seg === 2) seg2At = Number(e.t)
-        break
-      case 'done.appear':
-        doneAppearAt = Number(e.t)
         break
       case 'lock.apply': {
         const axis = e.axis as LockAxis
@@ -984,16 +1078,16 @@ function replay(events: log.Line[]): void {
         break
     }
     if (typeof e.seg === 'number') lastSeg = e.seg as Seg
-    if (typeof e.phase === 'string') lastPhase = e.phase as Phase
+    if (typeof e.phase === 'string') lastPhase = PHASE_ALIAS[e.phase] ?? (e.phase as Phase)
     if (e.state && typeof e.state === 'object') lastState = { ...(e.state as typeof lastState) }
-    if (!['canvas.new', 'canvas.discard', 'canvas.switch', 'workspace.reset'].includes(type)) currentN = n
+    if (!['canvas.new', 'canvas.discard', 'canvas.switch', 'workspace.reset', 'seg.end', 'lock.apply', 'seg.start', 'phase.start', 'phase.end', 'facilitator'].includes(type)) currentN = n
   }
   if (byN.size === 0) byN.set(1, newCanvas(1))
   sess.canvases = [...byN.values()].sort((a, b) => a.n - b.n)
   sess.current = Math.max(0, sess.canvases.findIndex((c) => c.n === currentN))
   sess.state = { ...lastState, mat: cur().mat }
   // 옛 로그(phase 없음)는 seg에서 단계를 되짚는다
-  setPhase(lastPhase ?? (lastSeg === 1 ? 'create1' : lastSeg === 2 ? 'create2' : lastSeg === 3 ? 'review' : 'circle'))
+  setPhase(lastPhase ?? (lastSeg === 1 ? 'create1' : lastSeg === 2 ? 'create2' : lastSeg === 3 ? 'review' : 'explore'))
   sess.chips = chips
   canvasOps.restoreList(list.filter((n) => n !== currentN))
   bumpId('n', maxNoteId)
@@ -1017,32 +1111,47 @@ function chipById(id: string): Chip | undefined {
 
 /** 서랍·패널·칩에서 끌어오는 중의 잔상 — 끌기가 확정된 뒤에만 */
 function ghostFor(target: string, x: number, y: number): Ghost | null {
-  if (target === 'slot:mat.sound') return { kind: 'sound', x, y }
+  if (target.startsWith('sound:')) return { kind: 'sound', x, y }
   if (target.startsWith('panel:') && target !== 'panel:absent') return { kind: 'image', img: target.slice(6), x, y }
   if (target.startsWith('chip:')) return { kind: 'chip', raw: chipById(target.slice(5))?.raw ?? '', x, y }
   return null
 }
 
+/** 이미지 선택을 푼다 — 손잡이가 사라진다 */
+function deselectImage(): void {
+  if (imageSel === null) return
+  const im = imageById(cur(), imageSel)
+  imageSel = null
+  if (im) imageOps.select(im, false)
+}
+
+function selectImage(im: Image): void {
+  if (imageSel === im.id) return
+  deselectImage()
+  imageSel = im.id
+  imageOps.select(im, true)
+}
+
 function onDown(d: DownInfo): void {
   // 입력 칸이 열려 있으면 바깥 접촉 = 확정 (§6-7). 패널 밖 접촉 = 닫힘 (§3-3). 그 접촉 자체는 평소대로 동작한다
   closedInput.delete(d.pointerId) // 포인터 id는 재사용된다 — 지난 접촉의 흔적을 지운다
+  imageTouches.delete(d.pointerId)
   if (text.isOpen()) {
     text.closeInput(true, onTextDone)
     closedInput.add(d.pointerId) // 이 접촉은 입력 칸을 닫는 데 쓰였다 — 빈 면 슬롯·칩이어도 다시 열지 않는다 (PI-004)
   }
-  if (panelOpen && !inRect(PANEL, d.x, d.y) && d.target !== 'slot:mat.image') panelOpen = false
+  if (panelOpen && !inRect(PANEL, d.x, d.y) && d.target !== `slot:mat.${panelOpen}`) panelOpen = null
   if (!d.acted) return
-  void audio.resume() // 첫 접촉이 AudioContext.resume()을 겸한다 (§7 · N1)
-  if (sess.phase === 'circle') {
-    audio.play({ on: 0, ...TUTORIAL_NOTE })
+  void audio.resume()
+  const cv = cur()
+  // 선택된 이미지 밖을 닿으면 선택이 풀린다
+  if (imageSel !== null && !d.target.startsWith(`image.move:${imageSel}`) && !d.target.startsWith(`image.size:${imageSel}`)) deselectImage()
+  if (d.target.startsWith('image:')) {
+    // 탭이면 선택, 누르기·끌기면 노트 — 뗄 때 갈린다. 소리는 그때 난다
+    imageTouches.set(d.pointerId, { id: d.target.slice(6), x: d.x, y: d.y })
     return
   }
-  const cv = cur()
-  if (d.target === 'surface' || d.target.startsWith('image:')) {
-    if (d.target.startsWith('image:')) {
-      const im = imageById(cv, d.target.slice(6))
-      if (im) material.imageTouch(im, d.x, d.y)
-    }
+  if (d.target === 'surface') {
     // 손 모드 — 손 노트는 놓는 즉시 발음. 규칙·난수는 뗄 때 열이 놓이며 1회 재생된다
     if (sess.state.gen === 'hand') {
       const at = audio.currentTime()
@@ -1085,7 +1194,8 @@ function onMove(m: MoveInfo): void {
     let e = imageDrags.get(m.pointerId)
     if (!e) {
       const kind = m.target.startsWith('image.move:') ? 'move' : 'size'
-      e = imageOps.begin(cv, m.target.slice(kind === 'move' ? 11 : 11), kind) ?? undefined
+      const [id, corner] = m.target.slice(11).split(':')
+      e = imageOps.begin(cv, id ?? '', kind, (corner as Corner | undefined) ?? null) ?? undefined
       if (!e) return
       imageDrags.set(m.pointerId, e)
     }
@@ -1094,7 +1204,8 @@ function onMove(m: MoveInfo): void {
   }
   let e = drags.get(m.pointerId)
   if (!e) {
-    if (m.target.startsWith('note.edge:')) e = notes.beginEdit(cv, m.target.slice(10), 'len') ?? undefined
+    if (m.target.startsWith('note.edgeL:')) e = notes.beginEdit(cv, m.target.slice(11), 'len', 'l') ?? undefined
+    else if (m.target.startsWith('note.edge:')) e = notes.beginEdit(cv, m.target.slice(10), 'len', 'r') ?? undefined
     else if (m.target.startsWith('note:')) e = notes.beginEdit(cv, m.target.slice(5), 'pos') ?? undefined
     if (!e) return
     drags.set(m.pointerId, e)
@@ -1111,6 +1222,7 @@ function releaseHeld(pointerId: number, minLenMs = 0): void {
 
 function onCancel(pointerId: number): void {
   closedInput.delete(pointerId)
+  imageTouches.delete(pointerId)
   const le = labelDrags.get(pointerId)
   if (le) {
     labelOps.cancel(cur(), le)
@@ -1163,7 +1275,6 @@ function onGesture(g: Gesture): void {
 
 function handleGesture(g: Gesture): void {
   ghost = null
-  if (sess.phase === 'circle') return // 소리는 down에서 났다. 노트는 남기지 않는다
   const cv = cur()
   const t = g.target
   const inSurface = inRect(SURFACE, g.x1, g.y1)
@@ -1190,21 +1301,42 @@ function handleGesture(g: Gesture): void {
     return
   }
 
-  // 이미지 손잡이
+  // 선택된 이미지 — 가운데 끌기 = 옮기기(면 밖에서 떼면 제거) · 모서리 끌기 = 크기 · 가운데 탭 = 선택 해제
   if (t.startsWith('image.move:') || t.startsWith('image.size:')) {
     const e = imageDrags.get(g.pointerId)
     imageDrags.delete(g.pointerId)
     if (g.kind === 'drag' && e) {
-      if (e.kind === 'move' && !inSurface) imageOps.remove(cv, e)
-      else imageOps.commit(cv, e)
+      if (e.kind === 'move' && !inSurface) {
+        imageOps.remove(cv, e)
+        imageSel = null
+      } else imageOps.commit(cv, e)
       opsInSeg++
+    } else if (g.kind === 'tap' && t.startsWith('image.move:')) deselectImage()
+    return
+  }
+
+  // 선택되지 않은 이미지 — 탭 = 선택(손잡이가 보인다) · 누르기·끌기 = 그 위에 손으로 친다 (D4)
+  if (t.startsWith('image:')) {
+    const it = imageTouches.get(g.pointerId)
+    imageTouches.delete(g.pointerId)
+    const im = imageById(cv, t.slice(6))
+    if (!im) return
+    if (g.kind === 'tap') {
+      selectImage(im)
+      return
     }
+    material.imageTouch(im, it?.x ?? g.x0, it?.y ?? g.y0)
+    if (sess.state.gen === 'hand') {
+      const n = notes.addFromGesture(cv, g, 'image')
+      audio.play({ ...n, on: 0, pitch: soundPitch(n.pitch) })
+    } else gen.column(cv, sess.state, params, sess.seed, g)
+    opsInSeg++
     return
   }
 
   // 노트 위 — 선택 토글 / 고치기 / 지우기
-  if (t.startsWith('note:') || t.startsWith('note.edge:')) {
-    const id = t.startsWith('note:') ? t.slice(5) : t.slice(10)
+  if (t.startsWith('note:') || t.startsWith('note.edge:') || t.startsWith('note.edgeL:')) {
+    const id = t.slice(t.indexOf(':') + 1)
     const e = drags.get(g.pointerId)
     drags.delete(g.pointerId)
     if (g.kind === 'drag' && e) {
@@ -1223,10 +1355,10 @@ function handleGesture(g: Gesture): void {
     return
   }
 
-  // 빈 면 · 이미지 몸통 — 더하기 (손: 노트 하나 · 규칙/난수: 열)
-  if (t === 'surface' || t.startsWith('image:')) {
+  // 빈 면 — 더하기 (손: 노트 하나 · 규칙/난수: 열)
+  if (t === 'surface') {
     releaseHeld(g.pointerId, g.kind === 'tap' ? LEN_DEFAULT : 0)
-    if (sess.state.gen === 'hand') notes.addFromGesture(cv, g, t.startsWith('image:') ? 'image' : null)
+    if (sess.state.gen === 'hand') notes.addFromGesture(cv, g, null)
     else gen.column(cv, sess.state, params, sess.seed, g)
     opsInSeg++
     return
@@ -1252,21 +1384,31 @@ function handleGesture(g: Gesture): void {
   }
 
   // 재료 — 열람(탭) · 채택(면으로 끌어 놓기) · 적기
+  // 소리 · 이미지 — 같은 몸짓. 슬롯 탭 = 목록이 열린다 · 목록의 칸을 면으로 끌어 놓는다 (V1.0 §3)
   if (t === 'slot:mat.sound') {
-    if (g.kind === 'drag') {
-      if (inSurface) {
-        material.adoptSound(cv, sess.state, g.x1, g.y1)
-        afterAdopt()
-        opsInSeg++
-      }
-    } else material.peekSound()
+    if (g.kind !== 'drag') {
+      panelOpen = panelOpen === 'sound' ? null : 'sound'
+      if (panelOpen) material.peekSounds()
+    }
     return
   }
   if (t === 'slot:mat.image') {
     if (g.kind !== 'drag') {
-      panelOpen = !panelOpen
+      panelOpen = panelOpen === 'image' ? null : 'image'
       if (panelOpen) material.peekImage()
     }
+    return
+  }
+  if (t.startsWith('sound:')) {
+    const id = t.slice(6)
+    if (g.kind === 'drag') {
+      if (inSurface && !inRect(PANEL, g.x1, g.y1)) {
+        material.adoptSound(cv, sess.state, id, g.x1, g.y1)
+        afterAdopt()
+        panelOpen = null
+        opsInSeg++
+      }
+    } else material.peekSound(id)
     return
   }
   if (t === 'slot:mat.blank') {
@@ -1286,9 +1428,10 @@ function handleGesture(g: Gesture): void {
       return
     }
     if (g.kind === 'drag' && inSurface) {
-      material.placeImage(cv, sess.state, img, g.x1, g.y1)
+      const im = material.placeImage(cv, sess.state, img, g.x1, g.y1)
       afterAdopt()
-      panelOpen = false
+      panelOpen = null
+      selectImage(im) // 놓은 것이 선택 — 노트와 같다. 손잡이가 보인다
       opsInSeg++
     }
     return
@@ -1297,6 +1440,7 @@ function handleGesture(g: Gesture): void {
   // 캔버스 목록
   if (t.startsWith('canvas:')) {
     if (g.kind !== 'drag') {
+      deselectImage()
       stopIfPlaying(cv)
       canvasOps.switchTo(sess, Number(t.slice(7)))
       afterAdoptOnSwitch()
@@ -1313,13 +1457,9 @@ function handleGesture(g: Gesture): void {
   if (g.kind === 'drag') return
   switch (t) {
     case 'slot:mark':
-      ack('mark')
+      ack('mark') // 버튼만 밝아진다. 작업 면 · 슬롯 · 목록은 바뀌지 않고 소리도 없다 (G10 개정)
       buttons.mark(cv, opsInSeg)
       if (sess.seg >= 1) marks++ // 탐색·소개 중의 마킹은 로그에만 (phase로 구분)
-      return
-    case 'slot:done':
-      ack('done')
-      endSeg1('user')
       return
     case 'slot:grid':
       grid.toggle(sess.state, 'user')
@@ -1336,13 +1476,13 @@ function handleGesture(g: Gesture): void {
       gen.setGen(sess.state, t.slice(9) as Gen, 'user')
       return
     case 'slot:canvas.keep':
-      ack('canvas.keep')
+      deselectImage()
       stopIfPlaying(cv)
       canvasOps.keep(sess)
       onNewCanvasInSeg2()
       return
     case 'slot:canvas.discard':
-      ack('canvas.discard')
+      deselectImage()
       stopIfPlaying(cv)
       canvasOps.discard(sess)
       onNewCanvasInSeg2()
@@ -1352,9 +1492,9 @@ function handleGesture(g: Gesture): void {
   }
 }
 
-/** 우 4 눌림 확인 (D15 ③) — 버튼만 잠깐 밝아진다. 화면의 다른 곳 · 소리는 바뀌지 않는다 */
+/** 마킹 눌림 확인 (G10 개정) — 버튼만 MARK_FLASH 동안 밝아진다 */
 function ack(name: string): void {
-  acks.set(name, performance.now() + PRESS_ACK)
+  acks.set(name, performance.now() + MARK_FLASH)
 }
 
 /** 구간 2에서 새 캔버스 — mat=blank 잠금이면 다시 첫 조작이 채택이어야 한다 */
@@ -1378,7 +1518,7 @@ function frame(): void {
 
   tickTimers()
 
-  const out = uiPerf === null ? 0 : Math.min(1, Math.max(0, (nowPerf - uiPerf) / TUTORIAL_OUT_MS))
+  const out = uiPerf === null ? 0 : Math.min(1, Math.max(0, (nowPerf - uiPerf) / UI_IN_MS))
   const active = new Set<string>()
   if (sess.state.grid) active.add('grid')
   if (cv.allOn) active.add('all')
@@ -1397,18 +1537,17 @@ function frame(): void {
   const view: View = {
     seg: sess.seg,
     flash: flashLeft > 0,
-    tutorialAlpha: sess.phase === 'circle' ? 1 : sess.phase === 'prep' ? 0 : 1 - out,
-    uiAlpha: sess.phase === 'prep' || sess.phase === 'circle' ? 0 : out,
+    uiAlpha: sess.phase === 'prep' ? 0 : out,
     notes: cv.notes,
     images: cv.images,
     labels: resolveLabels(cv.labels, cv.notes, sess.state.grid),
     imageEls: material.IMAGES,
     selection: cv.selection,
+    imageSel,
+    soundVals: material.SOUNDS,
     slots: sess.slots,
     gone,
     active,
-    doneVisible: sess.seg === 1 && doneAppearAt !== null,
-    doneAlpha: doneAppearAt === null ? 0 : Math.min(1, (log.now() - doneAppearAt) / FADE_IN),
     grid: sess.state.grid,
     panelOpen,
     playFrom: cv.playFrom,
@@ -1426,10 +1565,18 @@ function frame(): void {
     review,
     build: sess.build,
     pressed,
-    spotlight: sess.phase === 'intro' ? (intro.current()?.rects ?? null) : null,
+    spotlight: spotlightNow(),
   }
   draw(ctx2d, fit, view)
   requestAnimationFrame(frame)
+}
+
+/** 기능 소개 — 지금 단계의 자리를 밝힌다. 패널이 열려 있으면 패널도. 맺음 문장에서는 어둡게 하지 않는다 */
+function spotlightNow(): View['spotlight'] {
+  if (sess.phase !== 'briefing' || cleared) return null
+  const rects = intro.current()?.rects
+  if (!rects || rects.length === 0) return null
+  return panelOpen ? [...rects, PANEL] : rects
 }
 
 function deviceName(ua: string): string {

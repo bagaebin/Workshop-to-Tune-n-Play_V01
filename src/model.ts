@@ -75,18 +75,22 @@ export interface Canvas {
   kept: boolean
 }
 
-/** -1 준비 · 0 창작 전(원 · 탐색 · 기대 회고 · 기능 소개) · 1 구간 1 · 2 구간 2(잠금) · 3 회고 */
+/** -1 준비 · 0 창작 전(탐색 · 기대 회고 · 기능 소개) · 1 구간 1 · 2 구간 2(잠금) · 3 회고 */
 export type Seg = -1 | 0 | 1 | 2 | 3
 
 /**
- * 단계 (D15 안 2). seg는 분석 호환을 위해 그대로 두고, 창작 전의 네 단계는 모두 seg 0이다.
- *   prep(−1) → circle → explore → expect → intro (0) → create1 (1) → create2 (2) → review (3)
+ * 단계 (기능 명세 V1.0 §4). seg는 분석 호환을 위해 그대로 두고, 창작 전의 세 단계는 모두 seg 0이다.
+ *   prep(−1) → explore → recall → briefing (0) → create1 (1) → hold → create2 (2) → review (3)
+ * hold — 구간 1 종료 뒤 구간 2 시작 전. 잠금은 적용됐고 화면은 멈춰 있다 (R-013)
  */
-export type Phase = 'prep' | 'circle' | 'explore' | 'expect' | 'intro' | 'create1' | 'create2' | 'review'
+export type Phase = 'prep' | 'explore' | 'recall' | 'briefing' | 'create1' | 'hold' | 'create2' | 'review'
 
 export const SEG_OF: Readonly<Record<Phase, Seg>> = {
-  prep: -1, circle: 0, explore: 0, expect: 0, intro: 0, create1: 1, create2: 2, review: 3,
+  prep: -1, explore: 0, recall: 0, briefing: 0, create1: 1, hold: 2, create2: 2, review: 3,
 }
+
+/** 옛 로그(R-012)의 단계 이름 → 지금 이름 */
+export const PHASE_ALIAS: Readonly<Record<string, Phase>> = { circle: 'explore', expect: 'recall', intro: 'briefing' }
 
 export type LockAxis = 'mat' | 'grid' | 'gen'
 
@@ -99,6 +103,8 @@ export interface Slots {
   bottom: string[]
   drawer: string[]
   panel: string[]
+  /** 소리 목록의 순서 (s1..s3 셔플) */
+  sounds: string[]
 }
 
 export interface Session {

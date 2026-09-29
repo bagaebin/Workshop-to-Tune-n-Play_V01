@@ -15,18 +15,17 @@ export const AXIS: Rect = { x: 160, y: 0, w: 1206, h: 48 }
 export const SURFACE: Rect = { x: 160, y: 48, w: 1206, h: 836 }
 export const BOTTOM: Rect = { x: 0, y: 884, w: 1366, h: 140 }
 
-// ── §3-2 하단 띠 슬롯 10 (y 904–1004)
+// ── §3-2 하단 띠 슬롯 9 — 좌 6 + 우 3 (y 904–1004). 기능 명세 V1.0 §2-1 · §5 — `done` 삭제
 export const SLOT_Y = 904
 export const BOTTOM_LEFT_X = [40, 164, 288, 412, 536, 660] as const
-export const BOTTOM_RIGHT_X = [854, 978, 1102, 1226] as const
+export const BOTTOM_RIGHT_X = [916, 1040, 1164] as const
 export const BOTTOM_LEFT_DEFAULT = ['grid', 'gen.hand', 'gen.rule', 'gen.random', 'play', 'all'] as const
-export const BOTTOM_RIGHT = ['mark', 'canvas.keep', 'canvas.discard', 'done'] as const
-/** 우 4만 글자 (D12 · N5 예외) */
+export const BOTTOM_RIGHT = ['mark', 'canvas.keep', 'canvas.discard'] as const
+/** 우 3만 글자 (D12 개정 · N5 예외) */
 export const SLOT_LABEL: Readonly<Record<string, string>> = {
   mark: '마킹',
   'canvas.keep': '남기고 새로',
   'canvas.discard': '지우고 새로',
-  done: '여기까지',
 }
 
 // ── §3-3 재료 서랍
@@ -34,12 +33,25 @@ export const DRAWER_SLOT_POS = [{ x: 30, y: 32 }, { x: 30, y: 168 }, { x: 30, y:
 /** 헤더 slots_drawer 표기(접두사 없음). target은 `slot:mat.<name>` */
 export const DRAWER_DEFAULT = ['blank', 'sound', 'image'] as const
 export const PANEL_DEFAULT = ['i1', 'i2', 'i3', 'i4', 'i5'] as const
+export const SOUNDS_DEFAULT = ['s1', 's2', 's3'] as const
 
 // ── §3-3 이미지 패널 — mat.image 슬롯 탭으로 열린다. 작업 면 왼쪽 끝을 덮는다
 export const PANEL: Rect = { x: 160, y: 48, w: 200, h: 836 }
 export const PANEL_IMG = { w: 150, h: 100 } as const
 export const PANEL_ABSENT = 100
 export const PANEL_GAP = 24
+
+/** 소리 목록 — mat.sound 슬롯 탭으로 열린다. 이미지 패널과 같은 자리 · 같은 크기의 칸. absent 없음 (V1.0 §2-2는 이미지 패널에만 둔다) */
+export function soundRects(sounds: readonly string[]): SlotRect[] {
+  const total = sounds.length * PANEL_IMG.h + (sounds.length - 1) * PANEL_GAP
+  let y = PANEL.y + Math.floor((PANEL.h - total) / 2)
+  const out: SlotRect[] = []
+  for (const name of sounds) {
+    out.push({ name: `sound:${name}`, rect: { x: PANEL.x + (PANEL.w - PANEL_IMG.w) / 2, y, w: PANEL_IMG.w, h: PANEL_IMG.h } })
+    y += PANEL_IMG.h + PANEL_GAP
+  }
+  return out
+}
 
 /** 5장(셔플 순서) + absent. 세로 간격 24, 합 720을 세로 중앙에 */
 export function panelRects(panel: readonly string[]): SlotRect[] {
@@ -98,12 +110,27 @@ export function labelRect(l: Label): Rect {
   return l.onAxis ? { x: l.x, y: AXIS.y + 6, w, h: 36 } : { x: l.x, y: l.y - NOTE_H / 2 - 22, w, h: 18 }
 }
 
-/** 이미지 손잡이 — 좌상단 옮기기 · 우하단 크기 (§6-8) */
-export function imageMoveRect(im: Image): Rect {
-  return { x: im.x, y: im.y, w: HANDLE, h: HANDLE }
+/** 이미지 손잡이 — 선택된 이미지의 네 모서리 (V1.0 §3-2). 가운데는 옮기기 */
+export type Corner = 'nw' | 'ne' | 'sw' | 'se'
+export const CORNERS: readonly Corner[] = ['nw', 'ne', 'sw', 'se']
+export function imageCornerRect(im: Image, c: Corner): Rect {
+  return {
+    x: c === 'nw' || c === 'sw' ? im.x : im.x + im.w - HANDLE,
+    y: c === 'nw' || c === 'ne' ? im.y : im.y + im.h - HANDLE,
+    w: HANDLE,
+    h: HANDLE,
+  }
 }
-export function imageSizeRect(im: Image): Rect {
-  return { x: im.x + im.w - HANDLE, y: im.y + im.h - HANDLE, w: HANDLE, h: HANDLE }
+
+/** 노트 손잡이 — 선택된 노트의 양 끝. 끝에서 바깥으로 NOTE_EDGE/2, 안으로는 몸통의 1/3까지 */
+export function noteHandleRects(r: Rect): { l: Rect; r: Rect } {
+  const inner = Math.min(NOTE_EDGE / 2, r.w / 3)
+  const y = r.y - NOTE_HIT_SLOP
+  const h = r.h + NOTE_HIT_SLOP * 2
+  return {
+    l: { x: r.x - NOTE_EDGE / 2, y, w: NOTE_EDGE / 2 + inner, h },
+    r: { x: r.x + r.w - inner, y, w: NOTE_EDGE / 2 + inner, h },
+  }
 }
 
 // ── §3-3 캔버스 목록 — 60 × 40 축소판, 2열 × 5행, 간격 8
@@ -167,12 +194,13 @@ export function shuffledSlots(pid: string): Slots {
     bottom: [...shuffle(BOTTOM_LEFT_DEFAULT, pid, 'bottom'), ...BOTTOM_RIGHT],
     drawer: shuffle(DRAWER_DEFAULT, pid, 'drawer'),
     panel: shuffle(PANEL_DEFAULT, pid, 'panel'),
+    sounds: shuffle(SOUNDS_DEFAULT, pid, 'sounds'),
   }
 }
 
 export interface SlotRect { name: string; rect: Rect }
 
-/** 하단 10 + 서랍 3의 사각형. name은 target 표기(`mark` · `gen.rule` · `mat.image`) */
+/** 하단 9 + 서랍 3의 사각형. name은 target 표기(`mark` · `gen.rule` · `mat.image`) */
 export function slotRects(slots: Slots): SlotRect[] {
   const out: SlotRect[] = []
   const xs = [...BOTTOM_LEFT_X, ...BOTTOM_RIGHT_X]
@@ -222,13 +250,16 @@ export interface HitCtx {
   notes: readonly Note[]
   /** 잠겨 사라진 슬롯 이름 (§11-2) */
   gone: ReadonlySet<string>
-  /** `done`이 아직 등장 전이면 false — 자리만 비어 있고 맞지 않는다 (§3-2) */
-  doneVisible: boolean
+  /** 선택된 노트 — 손잡이는 이것들에만 있다 */
+  selection: ReadonlySet<string>
+  /** 선택된 이미지 (없으면 null) — 손잡이와 옮기기는 이것에만 */
+  imageSel: string | null
   /** 격자 ON — 노트를 보이는 자리(양자화)로 맞춘다 */
   grid: boolean
-  /** 이미지 패널이 열려 있는가 · 패널의 장 순서 */
-  panelOpen: boolean
+  /** 열린 패널 — 이미지 패널 · 소리 목록 (한 번에 하나) */
+  panelOpen: 'image' | 'sound' | null
   panel: readonly string[]
+  sounds: readonly string[]
   /** 면 위 이미지 (노트 아래) */
   images: readonly Image[]
   /** 캔버스 목록에 있는 캔버스 번호, 목록 순서 */
@@ -255,11 +286,11 @@ export function hitTest(x: number, y: number, c: HitCtx): string {
   for (const s of slotRects(c.slots)) {
     if (!inRect(s.rect, x, y)) continue
     if (c.gone.has(s.name)) return `slot.gone:${s.name}`
-    if (s.name === 'done' && !c.doneVisible) return 'none'
     return `slot:${s.name}`
   }
   if (c.panelOpen) {
-    for (const p of panelRects(c.panel)) if (inRect(p.rect, x, y)) return p.name
+    const rs = c.panelOpen === 'image' ? panelRects(c.panel) : soundRects(c.sounds)
+    for (const p of rs) if (inRect(p.rect, x, y)) return p.name
     if (inRect(PANEL, x, y)) return 'none' // 패널 안 빈 곳 — 가려진 자리(blocked)는 session이 판정한다
   }
   for (let i = 0; i < c.list.length; i++) {
@@ -270,37 +301,40 @@ export function hitTest(x: number, y: number, c: HitCtx): string {
     for (const l of c.labels) if (l.onAxis && inRect(labelRect(l), x, y)) return `label:${l.id}`
     return 'axis'
   }
-  // 이미지 손잡이는 노트보다 먼저 (§5-1)
-  for (let i = c.images.length - 1; i >= 0; i--) {
-    const im = c.images[i]
-    if (!im) continue
-    if (inRect(imageMoveRect(im), x, y)) return `image.move:${im.id}`
-    if (!c.imageSizeCut && inRect(imageSizeRect(im), x, y)) return `image.size:${im.id}`
+  // 선택된 이미지의 모서리 손잡이는 노트보다 먼저 (§5-1)
+  const sel = c.imageSel ? c.images.find((im) => im.id === c.imageSel) : undefined
+  if (sel && !c.imageSizeCut) {
+    for (const k of CORNERS) if (inRect(imageCornerRect(sel, k), x, y)) return `image.size:${sel.id}:${k}`
   }
-  // 노트는 나중에 놓은 것이 위 — 뒤에서부터
+  // 선택된 노트의 양 끝 손잡이 — 몸통보다 먼저. 나중에 놓은 것이 위
+  for (let i = c.notes.length - 1; i >= 0; i--) {
+    const n = c.notes[i]
+    if (!n || !c.selection.has(n.id)) continue
+    const h = noteHandleRects(noteRect(n, c.grid))
+    if (inRect(h.r, x, y)) return `note.edge:${n.id}`
+    if (inRect(h.l, x, y)) return `note.edgeL:${n.id}`
+  }
   for (let i = c.notes.length - 1; i >= 0; i--) {
     const n = c.notes[i]
     if (!n) continue
     const r0 = noteRect(n, c.grid)
     const r = { x: r0.x - 4, y: r0.y - NOTE_HIT_SLOP, w: r0.w + 8, h: r0.h + NOTE_HIT_SLOP * 2 }
-    if (!inRect(r, x, y)) continue
-    const edge = Math.min(NOTE_EDGE, r.w / 3) // 짧은 노트는 몸통을 더 남긴다 — 옮기기가 길이 조정에 먹히지 않게
-    return x >= r.x + r.w - edge ? `note.edge:${n.id}` : `note:${n.id}`
+    if (inRect(r, x, y)) return `note:${n.id}`
   }
   for (const l of c.labels) if (!l.onAxis && inRect(labelRect(l), x, y)) return `label:${l.id}`
-  // 이미지 몸통은 노트 아래 — 나중에 놓은 것이 위
+  // 이미지 몸통은 노트 아래 — 나중에 놓은 것이 위. 선택된 이미지의 몸통은 옮기기
   for (let i = c.images.length - 1; i >= 0; i--) {
     const im = c.images[i]
-    if (im && inRect(im, x, y)) return `image:${im.id}`
+    if (im && inRect(im, x, y)) return im.id === c.imageSel ? `image.move:${im.id}` : `image:${im.id}`
   }
   if (inRect(SURFACE, x, y)) return 'surface'
   return 'none'
 }
 
 /** 패널이 열린 동안 패널 안이지만 장·absent가 아닌 자리 — blocked:true (§3-3) */
-export function panelBlocks(panel: readonly string[], x: number, y: number): boolean {
+export function panelBlocks(rects: readonly SlotRect[], x: number, y: number): boolean {
   if (!inRect(PANEL, x, y)) return false
-  return !panelRects(panel).some((p) => inRect(p.rect, x, y))
+  return !rects.some((p) => inRect(p.rect, x, y))
 }
 
 // ── §3-1 배율 · 레터박스

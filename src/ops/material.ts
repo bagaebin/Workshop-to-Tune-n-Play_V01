@@ -1,10 +1,10 @@
 /**
- * ops/material.ts — 재료 열람과 채택 (SPEC §6-6 · §13)
+ * ops/material.ts — 재료 열람과 채택 (기능 명세 V1.0 §3 · SPEC §6-6 · §13)
  *
- * mat.sound  탭 = 열람(1회 재생, mat.peek) · 면으로 끌어 놓기 = 채택(첫 이벤트가 놓은 자리) → mat.adopt(상태가 바뀔 때만) + note.add src:material
+ * mat.sound  탭 = 소리 목록(mat.peek) · 목록의 칸 탭 = 들어 보기(mat.peek {id}) · 칸을 면으로 끌어 놓기 = 채택 → mat.adopt(상태가 바뀔 때만) + note.add src:material {sound}
  * mat.image  탭 = 이미지 패널(mat.peek) · 패널의 장을 끌어 놓기 → mat.adopt(상태가 바뀔 때만) + image.place
- * mat.blank  탭 = 적기 (4단계)
- * 재료는 빌드에 번들된다 — 서비스 워커가 함께 프리캐시한다. 실물 교체는 파일만 (T11).
+ * mat.blank  탭 = 적기
+ * 재료는 빌드에 번들된다 — 서비스 워커가 함께 프리캐시한다.
  */
 import { L, IMG_DEFAULT, VEL_FIXED, TONE_FIXED } from '../constants'
 import { onOfX, pitchOfY, clamp, SURFACE } from '../layout'
@@ -12,19 +12,20 @@ import { nextId, type Canvas, type Image, type Note, type State, type Vals } fro
 import * as audio from '../audio'
 import * as log from '../log'
 import * as scope from './scope'
-import soundMaterial from '../../materials/sound.json'
+import s1 from '../../materials/sound/s1.json'
+import s2 from '../../materials/sound/s2.json'
+import s3 from '../../materials/sound/s3.json'
 
 /**
- * 소리 재료 실물 — materials/sound.json (T11 · 09.29 교체). 참여자에게 보이는 소리 재료는 이것 하나뿐이다.
+ * 소리 재료 — materials/sound/s1..s3.json (볼트 2026-09-29_sound_material의 S1 · S2 · G4, 값 그대로).
  * on은 첫 이벤트 0 기준 상대 ms · pitch는 0.5 + 반음/48 이라 첫 음과의 음정만 의미가 있다 · vel·tone 0.5 고정.
- *
- * 예비안 — 개발자 상수로만 둔다. 화면에 노출하거나 런타임에 바꾸지 않는다. 쓰려면 sound.json을 갈아끼우고 다시 빌드한다.
- *   예비 1 — S2 (두 덩어리)
- *   on  [0,110,230,1600,1760,2050]  pitch [0.5,0.4792,0.5625,0.6875,0.6042,0.5833]  len [90,90,400,140,160,700]
- *   예비 2 — G4
- *   on  [0,950,1370,1610,2210,2390] pitch [0.5,0.625,0.6875,0.7083,0.5625,0.5208]  len [930,300,220,150,160,800]
+ * 이름(s1..s3)은 로그에만 남는다. 화면에는 글자가 없다.
  */
-const SOUND: Vals[] = (soundMaterial as { vals: Vals[] }).vals
+export const SOUNDS: ReadonlyMap<string, readonly Vals[]> = new Map([
+  ['s1', (s1 as { vals: Vals[] }).vals],
+  ['s2', (s2 as { vals: Vals[] }).vals],
+  ['s3', (s3 as { vals: Vals[] }).vals],
+])
 
 const imageUrls = import.meta.glob('../../materials/img/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
@@ -46,7 +47,8 @@ export function preload(): Promise<void> {
       IMAGES.set(name, img)
       jobs.push(img.decode().catch(() => undefined))
     }
-    await Promise.all(jobs)
+    // 디코드가 끝나지 않아도(화면이 가려진 탭 등) 세션 시작 · 복구가 멈추지 않게 4 s에서 놓는다
+    await Promise.race([Promise.all(jobs), new Promise((r) => setTimeout(r, 4000))])
   })()
   return readyPromise
 }
@@ -55,15 +57,22 @@ export function ready(): Promise<void> {
   return preload()
 }
 
-export function soundDuration(): number {
-  return SOUND.reduce((m, v) => Math.max(m, v.on + v.len), 0)
+export function soundDuration(id: string): number {
+  return (SOUNDS.get(id) ?? []).reduce((m, v) => Math.max(m, v.on + v.len), 0)
 }
 
-/** 열람 — 재료 열을 지금부터 1회 재생. 놓이지 않는다 */
-export function peekSound(): void {
+/** 소리 슬롯 탭 — 목록이 열린다 */
+export function peekSounds(): void {
+  log.log('mat.peek', { mat: 'sound' }, 'sound')
+}
+
+/** 목록의 칸 탭 — 그 소리를 지금부터 1회 재생. 놓이지 않는다 */
+export function peekSound(id: string): void {
+  const vals = SOUNDS.get(id)
+  if (!vals) return
   const now = audio.currentTime()
-  for (const v of SOUND) audio.play(v, now + v.on / 1000)
-  log.log('mat.peek', { mat: 'sound', dur: soundDuration() }, 'sound')
+  for (const v of vals) audio.play(v, now + v.on / 1000)
+  log.log('mat.peek', { mat: 'sound', id, dur: soundDuration(id) }, 'sound')
 }
 
 export function peekImage(): void {
@@ -71,14 +80,15 @@ export function peekImage(): void {
 }
 
 /** 채택 — 첫 이벤트가 놓은 (x, y)에 오도록 열 전체 배치. 상대 음고를 유지한다. L을 넘는 이벤트는 버린다 */
-export function adoptSound(cv: Canvas, state: State, x: number, y: number): Note[] {
-  const first = SOUND[0]
-  if (!first) return []
+export function adoptSound(cv: Canvas, state: State, id: string, x: number, y: number): Note[] {
+  const vals0 = SOUNDS.get(id)
+  const first = vals0?.[0]
+  if (!vals0 || !first) return []
   const baseOn = onOfX(x)
   const basePitch = pitchOfY(y)
   const placed: Note[] = []
   let truncated = 0
-  for (const v of SOUND) {
+  for (const v of vals0) {
     const on = Math.round(baseOn + v.on)
     if (on >= L) {
       truncated++
@@ -98,11 +108,11 @@ export function adoptSound(cv: Canvas, state: State, x: number, y: number): Note
   if (cv.mat !== 'sound') {
     cv.mat = 'sound'
     state.mat = 'sound'
-    log.log('mat.adopt', { mat: 'sound', x: Math.round(x), y: Math.round(y) }, 'sound')
+    log.log('mat.adopt', { mat: 'sound', id, x: Math.round(x), y: Math.round(y) }, 'sound')
   }
   cv.notes.push(...placed)
   const vals = placed.map(({ on, pitch, len, vel, tone }) => ({ on, pitch, len, vel, tone }))
-  log.log('note.add', { ids: placed.map((n) => n.id), count: placed.length, src: 'material', vals, scope: placed.length === 1 ? 'one' : 'many', truncated: truncated || undefined }, 'sound')
+  log.log('note.add', { ids: placed.map((n) => n.id), count: placed.length, src: 'material', sound: id, vals, scope: placed.length === 1 ? 'one' : 'many', truncated: truncated || undefined }, 'sound')
   // 놓은 열이 선택 — 바로 옮기거나 버릴 수 있다. 놓는 즉시 1회 들린다
   cv.selection = new Set(placed.map((n) => n.id))
   cv.allOn = false

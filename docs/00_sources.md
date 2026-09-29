@@ -5,6 +5,8 @@
 | 문서 | 파일 | 버전 · 상태 | 저장소에서의 역할 |
 | --- | --- | --- | --- |
 | **Probe 개발 명세** | `2026-09-22_Probe 개발 명세.md` | active · 2026-09-23 (SPEC.md 동기화 09.23) | **정본** → [SPEC.md](../SPEC.md) |
+| **Probe 기능 명세 V1.0** | `2026-09-29_Probe 기능 명세_V1.0.md` | confirmed · 2026-09-29 | **확정본** → [SPEC_V1.0.md](../SPEC_V1.0.md). 개발 명세와 어긋나면 이것이 이긴다 |
+| 진행자 스크립트 V02 | `2026-09-29_진행자 스크립트_V02.html` | 2026-09-29 | 기능 소개 15문장 · 과제문 · 구두 확인 문장의 정본 → `src/intro.ts` · `src/facilitator.ts` |
 | Probe 구현 명세 | `2026-09-22_Probe 구현 명세_V0.3.md` | V0.3 draft · 2026-09-22 | 근거·대안·승인 목록 ⑨–㉑. SPEC과 다르면 SPEC이 이긴다 |
 | Probe 기능 명세 | `2026-09-21_Probe 기능 명세_V0.1.md` | V0.1 draft · 2026-09-22 갱신 | G1–G16 · N1–N5 · 수용 기준 · TODO T11/T16/T17 → [features/traceability.md](features/traceability.md) |
 | 워크숍 세션 계획 | `2026-09-21_workshop_session_plan_V03.md` | V03 draft · 2026-09-22 갱신 | 세션 골격 100분 · Probe 구간(§6) · 오각 대조(§7) · 진행자 원칙(§10) |

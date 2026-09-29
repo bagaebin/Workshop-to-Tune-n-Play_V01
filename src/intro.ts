@@ -1,15 +1,15 @@
 /**
- * intro.ts — 기능 소개 · 튜토리얼 페이지 (D15 안 2 ③)
+ * intro.ts — 기능 소개 (기능 명세 V1.0 §4-4 · 진행자 스크립트 V02 4/5장)
  *
- * 자유 탐색과 기대 회고 뒤, 창작 전에 한 번. 기능을 하나씩 밝히고(나머지는 어둡게) 한 줄로 **동작만** 알린다.
- * 규칙 (볼트 결정 요청 §3) —
+ * 자유 탐색과 기대 회고 뒤, 창작 전에 한 번. 진행자가 고정 문장을 읽고 참여자가 자기 손으로 한 번씩 눌러 본다.
+ * 화면에는 지금 소개하는 자리만 밝히고(나머지는 어둡게) 같은 문장을 띠에 보인다 — 순서가 참여자마다 달라 진행자가 놓치지 않게.
  *   1 동작만 말한다, 용도는 말하지 않는다      2 순서는 그 참여자 화면의 배치 순서 (좌 6 · 서랍 3은 셔플돼 있다)
  *   3 전부 한 번씩, 같은 길이로                 4 진행자가 시연하지 않는다 — 참여자 손으로
- *   5 마킹 · 여기까지는 존재만 알리고 기준은 주지 않는다 (D12 ②)
- * 글자는 이 단계에만 있다. 끝나면 화면은 다시 글자 없는 상태로 돌아간다(우 4 제외).
+ *   5 마킹은 기준을 주지 않는다
+ * 소개하지 않는 것 — 이미지 패널의 「여기 없다」 칸 · 마킹을 언제 누르는지.
+ * 글자는 이 단계에만 있다. 끝나면 화면은 다시 글자 없는 상태로 돌아간다(우 3 제외).
  * 소개 중에도 모든 기능은 평소대로 동작한다 — 밝히는 것은 표시일 뿐이다.
  */
-import { SLOT } from './constants'
 import { AXIS, SURFACE, SLIDER, LIST, slotRects, type Fit, type Rect } from './layout'
 import type { Slots } from './model'
 
@@ -19,30 +19,36 @@ export interface Step {
   text: string
 }
 
-/** 고정 문장 — 동작만. 바꾸려면 볼트 진행자 스크립트를 먼저 고친다 */
+/** 고정 문장 15 + 맺음 1 — 진행자 스크립트 V02 4/5장 그대로. 바꾸려면 볼트 스크립트를 먼저 고친다 */
 const TEXT: Readonly<Record<string, string>> = {
-  grid: '누르면 눈금이 생깁니다. 다시 누르면 사라집니다.',
-  'gen.hand': '이것이 켜져 있으면, 면을 누를 때 소리가 하나 놓입니다.',
-  'gen.rule': '이것이 켜져 있으면, 면을 누를 때 같은 간격으로 여러 개가 놓입니다. 왼쪽 막대로 간격이 바뀝니다.',
-  'gen.random': '이것이 켜져 있으면, 면을 누를 때 흩어진 여러 개가 놓입니다. 왼쪽 막대로 흩어지는 정도가 바뀝니다.',
-  play: '누르면 들려줍니다. 다시 누르면 멈춥니다. 위쪽 띠를 누르면 거기서부터 들려줍니다.',
-  all: '누르면 놓인 것이 전부 선택됩니다. 다시 누르면 풀립니다.',
-  'mat.blank': '누르면 글을 적을 수 있습니다. 적은 글은 이 칸에 남고, 끌어서 면이나 위쪽 띠에 놓을 수 있습니다.',
-  'mat.sound': '누르면 소리가 들립니다. 끌어서 면에 놓을 수 있습니다.',
-  'mat.image': '누르면 사진이 펼쳐집니다. 끌어서 면에 놓을 수 있습니다. 맨 아래 빈 칸은 찾는 사진이 없을 때 누릅니다.',
-  surface: '면을 누르면 소리가 놓입니다. 오래 누르거나 옆으로 끌면 길어집니다.',
-  select: '놓인 것을 누르면 선택됩니다. 다시 누르면 풀립니다. 여러 개를 차례로 누르면 함께 선택됩니다.',
-  edit: '놓인 것을 끌면 옮겨집니다. 오른쪽 끝을 끌면 길이가 바뀝니다. 면 밖으로 끌어내면 지워집니다.',
-  image: '사진은 왼쪽 위 모서리를 끌면 옮겨지고, 오른쪽 아래 모서리를 끌면 크기가 바뀝니다. 사진 위를 누르면 소리가 놓입니다.',
-  mic: '소리를 내면 — 목소리, 두드림 — 그 소리가 면에 놓입니다.',
-  mark: '아무 때나 눌러도 되고 안 눌러도 됩니다. 누르면 그 순간이 기록됩니다.',
-  'canvas.keep': '지금 것을 남겨 두고 빈 면에서 새로 시작합니다. 남긴 것은 왼쪽 아래에 작게 보이고, 누르면 돌아갑니다.',
-  'canvas.discard': '지금 것을 지우고 빈 면에서 새로 시작합니다.',
-  done: '나중에 이 자리에 「여기까지」가 나타납니다. 누르면 이 단계가 끝납니다.',
+  surface: '여기 넓은 면에 손가락을 대면 소리가 하나 납니다. 끌면 이어지고요. 한 번 해보시겠어요?',
+  select: '면에 놓인 걸 누르면 선택됩니다. 잇달아 누르면 여러 개가 같이 선택되고요. 선택하면 양 끝에 손잡이가 생기는데, 그걸 끌면 길이가 바뀝니다.',
+  remove: '놓인 걸 없애려면 면 밖으로 끌어내시면 됩니다.',
+  'mat.blank': '이걸 누르면 글자를 적는 칸이 나옵니다. 적고 나면 작은 조각으로 붙고, 그 조각을 면이나 위쪽 띠로 끌어다 놓을 수 있어요.',
+  'mat.sound': '이걸 누르면 미리 만들어 둔 소리들이 나옵니다. 하나를 면으로 끌어다 놓으면 그 소리가 놓여요.',
+  'mat.image': '이걸 누르면 이미지가 여러 장 나옵니다. 마찬가지로 면으로 끌어다 놓으실 수 있어요. 놓은 이미지를 누르면 모서리에 손잡이가 생기는데, 가운데를 끌면 옮겨지고 모서리를 끌면 크기가 바뀝니다.',
+  grid: '이걸 누르면 화면에 눈금이 생기고, 한 번 더 누르면 사라집니다.',
+  'gen.hand': '이게 켜져 있으면 면에 댈 때 하나씩 놓입니다.',
+  'gen.rule': '이걸 켜면 옆에 값 조절이 나오고, 면에 대면 일정한 간격으로 여러 개가 놓입니다.',
+  'gen.random': '이걸 켜면 면에 댈 때마다 불규칙하게 놓입니다.',
+  play: '이걸 누르면 지금까지 놓인 게 처음부터 재생됩니다. 재생 중에 다시 누르면 멈춰요. 위쪽 띠를 누르면 거기서부터 재생됩니다.',
+  all: '이걸 누르면 면에 있는 게 전부 선택됩니다. 한 번 더 누르면 풀려요.',
+  mark: '이건 마킹이에요. 누르면 버튼이 잠깐 밝아졌다 돌아오고 화면은 그대로입니다. 아무 때나 누르셔도 되고, 안 누르셔도 됩니다.',
+  'canvas.keep': '지금 화면을 남겨두고 빈 면에서 새로 시작합니다. 남긴 건 왼쪽 목록에 쌓여요.',
+  'canvas.discard': '지금 화면을 지우고 빈 면에서 새로 시작합니다.',
+  end: '이게 전부예요. 더 없습니다.',
 }
 
-/** 순서 — 좌 6(화면 순서) → 서랍 3(화면 순서) → 면 위 동작 → 우 4. 잘린 기능은 뺀다 */
-export function buildSteps(slots: Slots, opts: { mic: boolean; gone?: ReadonlySet<string> }): Step[] {
+/** 진행자용 짧은 이름 — 시트에 순서를 보일 때 */
+export const STEP_NAME: Readonly<Record<string, string>> = {
+  surface: '넓은 면', select: '선택 · 길이', remove: '지우기',
+  'mat.blank': '빈 면(적기)', 'mat.sound': '소리 재료', 'mat.image': '이미지',
+  grid: '격자', 'gen.hand': '손', 'gen.rule': '규칙', 'gen.random': '난수', play: '재생', all: '전체',
+  mark: '마킹', 'canvas.keep': '남기고 새로', 'canvas.discard': '지우고 새로', end: '맺음',
+}
+
+/** 순서 — 면 3 → 서랍 3(화면 순서) → 좌 6(화면 순서) → 우 3(고정) → 맺음. 스크립트 4/5장의 순서 */
+export function buildSteps(slots: Slots): Step[] {
   const rects = new Map(slotRects(slots).map((s) => [s.name, s.rect]))
   const out: Step[] = []
   const slot = (name: string, extra: Rect[] = []): void => {
@@ -50,22 +56,19 @@ export function buildSteps(slots: Slots, opts: { mic: boolean; gone?: ReadonlySe
     const text = TEXT[name]
     if (r && text) out.push({ key: name, rects: [r, ...extra], text })
   }
+  out.push({ key: 'surface', rects: [SURFACE], text: TEXT.surface as string })
+  out.push({ key: 'select', rects: [SURFACE], text: TEXT.select as string })
+  out.push({ key: 'remove', rects: [SURFACE], text: TEXT.remove as string })
+  for (const name of slots.drawer) slot(`mat.${name}`)
   for (const name of slots.bottom.slice(0, 6)) {
     if (name === 'gen.rule' || name === 'gen.random') slot(name, [SLIDER])
     else if (name === 'play') slot(name, [AXIS])
     else slot(name)
   }
-  for (const name of slots.drawer) slot(`mat.${name}`)
-  out.push({ key: 'surface', rects: [SURFACE], text: TEXT.surface as string })
-  out.push({ key: 'select', rects: [SURFACE], text: TEXT.select as string })
-  out.push({ key: 'edit', rects: [SURFACE], text: TEXT.edit as string })
-  out.push({ key: 'image', rects: [SURFACE], text: TEXT.image as string })
-  if (opts.mic) out.push({ key: 'mic', rects: [SURFACE], text: TEXT.mic as string })
   slot('mark')
   slot('canvas.keep', [LIST])
   slot('canvas.discard')
-  // done은 아직 보이지 않는다 — 빈 자리를 밝힌다
-  out.push({ key: 'done', rects: [{ x: 1226, y: 904, w: SLOT, h: SLOT }], text: TEXT.done as string })
+  out.push({ key: 'end', rects: [], text: TEXT.end as string })
   return out
 }
 

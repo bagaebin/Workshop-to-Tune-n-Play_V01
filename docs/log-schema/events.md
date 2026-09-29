@@ -14,7 +14,7 @@
 | `t` | `performance.now() − t0` · 정수 ms · 0점 = 플래시 |
 | `seq` | 단조 증가 |
 | `seg` | `-1` 준비 · `0` 튜토리얼 · `1` 자유 · `2` 잠금 · `3` 회고 |
-| `phase` | D15(R-012) — `prep` · `circle` · `explore` · `expect` · `intro` (seg 0 이하) · `create1` · `create2` · `review`. **SPEC 반영 대기** |
+| `phase` | V1.0 §7 — `prep` · `explore` · `recall` · `briefing`(seg 0) · `create1` · `hold`(구간 2 전 · seg 2) · `create2` · `review`. 09.29 오전 빌드의 로그는 `circle` · `expect` · `intro` |
 | `canvas` | 캔버스 일련번호 |
 | `state` | 18칸 좌표 `{ mat, grid, gen }` |
 | `target_mat` | 조작이 향한 재료 `sound`·`image` 또는 `null` |
@@ -32,8 +32,8 @@
 | `note.edit` | `ids[]` `count` `scope` `field` `prev[]` `vals[]` | ☐ |
 | `note.remove` | `ids[]` `count` `scope` | ☐ |
 | `scope.set` | `scope` `count` `ids[]` | ☐ |
-| `mat.peek` | `mat` `dur` | ☐ |
-| `mat.adopt` | `mat` `x` `y` | ☐ |
+| `mat.peek` | `mat` · 소리 목록의 칸을 들으면 `id` `dur` | ✔ |
+| `mat.adopt` | `mat` `x` `y` · 소리는 `id` | ✔ |
 | `grid.on` `grid.off` | `by` (`user`\|`lock`) | ☐ |
 | `gen.set` | `gen` `by` | ☐ |
 | `rule.param` | `name` `value` | ☐ |
@@ -51,13 +51,14 @@
 | `mark` | `snapshot` `n_before` | ☐ |
 | `canvas.new` `canvas.discard` `canvas.switch` `canvas.evict` | `from` `to` `reason` | ☐ |
 | `snapshot` | `id` `reason` `canvas` `playFrom` `notes[]` `images[]` `labels[]` | ☐ |
-| `done.appear` | — | ☐ |
-| `done` | `by` `since_appear` | ☐ |
-| `lock.apply` | §11-3 → [examples/lock.apply.json](examples/lock.apply.json) | ☐ |
+| ~~`done.appear`~~ ~~`done`~~ | V1.0에서 삭제. 구간 1 종료는 `seg.end {seg:1, by:'facilitator'}` | — |
+| `lock.apply` | `pn_margin`(V1.0 §6-1) · §11-3 → [examples/lock.apply.json](examples/lock.apply.json) | ☐ |
 | `idle` | `dur` | ☐ |
 | `facilitator` | `action` | ☐ |
 | `phase.start` `phase.end` | `phase`(시작하거나 끝나는 단계 — 이 두 타입에서는 봉투 `phase` 자리에 이 값이 적힌다) `by` (`facilitator`\|`timer`) · D15 · SPEC 반영 대기 | ✔ |
-| `workspace.reset` | `reason` (`intro`\|`create`) `from` `to` — 직전에 `snapshot reason:phase` | ✔ |
+| `workspace.reset` | 09.29 오전 빌드만. V1.0에서는 `canvas.new {reason:'seg1'}` | — |
+| `audio.unlock` | `by` `at:'seg-1'` `wall` — 준비 화면 [소리 확인]. 헤더 바로 뒤 | ✔ |
+| `image.select` | `id` `img` `on` | ✔ |
 | `intro.step` | `i` `key` — 띠에 그 단계가 보일 때마다(이전으로 돌아가도) | ✔ |
 | `intro.done` | — | ✔ |
 
@@ -67,3 +68,12 @@
 
 - `P07_2026-09-30.jsonl` — 헤더 + 이벤트 + 스냅샷, 한 줄 한 사건
 - `P07_2026-09-30.audio.m4a|webm` — 세션 전체 오디오
+
+## V1.0에서 필드가 늘어난 것
+
+- `note.add src:material` — `sound`(s1..s3)
+- `note.edit field:len` — `edge` (`l`\|`r`). 왼쪽이면 `on`도 바뀐다
+- `image.size` — `corner` (`nw`\|`ne`\|`sw`\|`se`)
+- `canvas.new` — `reason:'seg1'`은 화면 비우기(목록 · 칩 · 상태까지)
+- `touch.*` — `reason` ∈ `lock` · `recall` · `wait` · `hold` · `review`
+- 헤더 — `session_structure` `spec` `slots_sounds` `seg0_len_ms` `seg1_len_ms` `seg2_len_ms` `seg2_gated` `briefing_banner` `mark_flash_ms`

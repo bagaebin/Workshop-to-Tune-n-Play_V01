@@ -28,7 +28,8 @@ export function toggleNote(cv: Canvas, id: string): void {
 
 /** all 슬롯 탭 — 토글. 켜지면 전부 선택 */
 export function toggleAll(cv: Canvas): void {
-  cv.allOn = !cv.allOn
+  // 노트가 없으면 켤 것이 없다 — allOn을 켜지 않고 scope null · count 0으로 남긴다 (count 0 ↔ null)
+  cv.allOn = cv.notes.length > 0 && !cv.allOn
   cv.selection = cv.allOn ? new Set(cv.notes.map((n) => n.id)) : new Set()
   emit(cv)
 }

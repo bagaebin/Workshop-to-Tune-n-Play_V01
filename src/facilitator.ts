@@ -62,6 +62,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
   const checks: Record<string, boolean> = {}
   let lockRule: LockRule = 'v0.3'
   let pid = ''
+  let skipArmed = false
 
   const phaseName: Record<string, string> = { prep: '준비', explore: '자유 탐색', recall: '기대 회고', briefing: '기능 소개', create1: '구간 1', hold: '구간 1 끝 · 구간 2 전', create2: '구간 2 잠금', review: '회고' }
   const segName = (s: number) => ({ '-1': '준비', '0': '창작 전', '1': '구간 1 자유', '2': '구간 2 잠금', '3': '회고' })[String(s)] ?? String(s)
@@ -255,24 +256,25 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
 
     // ── 창작 전 (V1.0 §4) — 자유 탐색 4 → 기대 회고 3 → 기능 소개 7 → 과제문 1 → 구간 1
     if (st.phase === 'explore') {
-      panel.append(p('자유 탐색 — 개입 0. 질문받으면 "편하신 대로 하세요"만. 4분에 화면이 멈추고 기대 회고로 넘어간다.'))
-      panel.append(button('탐색 종료 → 기대 회고', () => {
+      panel.append(h('① 자유 탐색 (4분)'))
+      panel.append(p('개입 0. 질문받으면 "편하신 대로 하세요"만. 4분에 화면이 저절로 멈추고 기대 회고로 넘어간다 — 누를 것이 없다.\n일찍 끝내야 할 때만 아래를 누른다.'))
+      panel.append(button('탐색 종료 → ② 기대 회고', () => {
         api.endExploreEarly()
-      }, { small: true }))
+      }))
     }
     if (st.phase === 'recall') {
-      panel.append(h('기대 회고 (3분)'))
+      panel.append(h('② 기대 회고 (3분)'))
       panel.append(p('화면은 멈춰 있다. 슬롯을 하나씩 가리키며 묻는다. 안 누른 것을 먼저.\n(안 누른 것) "이건 안 눌러보셨는데, 뭐라고 생각하셨어요?"\n(누른 것) "이건 뭘 할 것 같았어요?"\n답을 말 그대로 받아 적는다. 맞다 · 틀리다를 말하지 않는다.'))
       expectEl = document.createElement('div')
       panel.append(expectEl)
       void loadExpect()
-      panel.append(button('기능 소개 시작 (7분)', () => {
+      panel.append(button('③ 기능 소개 시작 (7분)', () => {
         api.startIntro()
         close()
       }))
     }
     if (st.phase === 'briefing' && !st.cleared) {
-      panel.append(h('기능 소개 (7분)'))
+      panel.append(h('③ 기능 소개 (7분)'))
       panel.append(p('여는 말 한 문장만 — "이제 이게 뭘 하는 건지 화면이 하나씩 알려드릴 거예요. 직접 한 번씩 해보시고 [다음]을 누르시면 됩니다."\n그 뒤로는 읽지 않는다. 질문받으면 화면의 문장을 가리킨다. 시연하지 않는다. 용도는 말하지 않는다.\n참여자가 그 동작을 하면 [다음]이 켜진다(마킹 · 맺음은 처음부터 켜져 있다).'))
       introEl = p('')
       panel.append(introEl)
@@ -280,17 +282,18 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
         api.skipIntroStep()
       }, { small: true, disabled: st.introDone }))
     }
-    if (st.seg === 0) {
-      const skipping = st.phase !== 'briefing'
-      panel.append(h('구간 1 (1 + 10분)', 14))
+    // 구간 1로 가는 버튼은 기능 소개가 끝난 뒤에만 보인다. 그 전 단계에서는 맨 아래 「건너뛰기」 안에 숨긴다 (PI-016 — 점검 4에서 탐색 중에 눌러 소개를 건너뛰었다)
+    if (st.phase === 'briefing') {
+      panel.append(h('④ 구간 1 (1 + 10분)', 14))
       panel.append(p('① "화면을 새로 비우겠습니다. 이제부터 10분이에요." → [화면 비우기]\n② 과제문 — "떠오르는 것을 만들어 보세요. 정답도, 끝나는 기준도 없습니다. 완성하지 않으셔도 됩니다."\n③ [구간 1 시작]'))
-      panel.append(button(st.cleared ? '화면 비움 ✔' : skipping ? '화면 비우기 — 남은 단계를 건너뛴다' : '화면 비우기', () => {
+      panel.append(button(st.cleared ? '화면 비움 ✔' : '화면 비우기', () => {
         api.clearWorkspace()
-      }, { disabled: st.cleared, small: skipping }))
+      }, { disabled: st.cleared || !st.introDone }))
+      if (!st.introDone && !st.cleared) panel.append(p('소개가 끝나면(맺음 [끝]) 켜진다'))
       panel.append(button('구간 1 시작 (10분)', () => {
         api.startSeg1()
         close()
-      }, { small: skipping && !st.cleared }))
+      }, { disabled: !st.cleared }))
     }
     if (st.phase === 'create1') {
       panel.append(p('구간 1 — 개입 0. 10분이 되면 말로 끊는다 — "여기까지 할게요." 그리고 [구간 1 종료].\n화면은 자동으로 끝나지 않는다. 2분 이상 정지 시 한 번만 "지금 무슨 생각 하고 계세요?"'))
@@ -300,7 +303,8 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
     }
     if (st.phase === 'hold') {
       const [axis, value] = (st.lock ?? '=').split('=')
-      panel.append(h('구간 1 끝', 14))
+      panel.append(h('구간 1 끝 — 참여자 화면은 멈춰 있다', 14))
+      panel.append(p('아래 [구간 2 시작]을 누르기 전까지 참여자가 무엇을 눌러도 반응하지 않는다(접촉은 기록된다). 말할 것을 다 말한 뒤 누른다.'))
       panel.append(p('끊은 직후 — "지금 멈추라고 해서 멈춘 건가요, 하실 만큼 하신 건가요?" (답을 기록지에)'))
       panel.append(h(`잠긴 것 — ${api.lockName(axis ?? '', value ?? '')}`, 15))
       panel.append(p(`${st.lock ?? '—'} · 기록지에 적는다\n"이번에는 ○○만 빼고 해보시겠어요? 나머지는 그대로예요. 10분입니다."`))
@@ -327,6 +331,23 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
       panel.append(reviewEl)
       reviewLoaded = false
       void loadReview()
+    }
+
+    // 건너뛰기 — 비상용. 창작 전 단계를 건너뛰고 구간 1로. 되돌릴 수 없다
+    if (st.seg === 0 && st.phase !== 'briefing') {
+      panel.append(h('건너뛰기 (비상용)', 13))
+      const row = checkbox('남은 창작 전 단계를 건너뛰고 곧바로 구간 1로 간다 — 이 회차는 기능 소개 없이 진행된다', skipArmed, (v) => {
+        skipArmed = v
+        render()
+      })
+      panel.append(row)
+      if (skipArmed) {
+        panel.append(button('구간 1 시작 — 남은 단계를 건너뛴다', () => {
+          skipArmed = false
+          api.startSeg1()
+          close()
+        }, { danger: true, small: true }))
+      }
     }
 
     panel.append(h('내보내기'))
@@ -422,6 +443,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
   function open(): void {
     ensure()
     if (!root) return
+    skipArmed = false // 건너뛰기는 열 때마다 다시 잠근다
     root.style.display = 'block'
     render()
     if (timer === null) timer = window.setInterval(updateStatus, 100)

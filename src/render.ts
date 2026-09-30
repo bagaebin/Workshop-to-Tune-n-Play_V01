@@ -261,7 +261,8 @@ function drawNotes(ctx: CanvasRenderingContext2D, notes: readonly Note[], v: Vie
       if (!v.selection.has(n.id)) continue
       const r = noteRect(n, v.grid)
       const hs = noteHandleRects(r)
-      for (const cx of [r.x, r.x + r.w]) {
+      // 손잡이는 끝의 바깥쪽에 — 짧은 노트의 몸통을 가리지 않는다
+      for (const cx of [r.x - 8, r.x + r.w + 8]) {
         const k: Rect = { x: cx - 5, y: hs.l.y + 2, w: 10, h: hs.l.h - 4 }
         fillRect(ctx, k, '#ffffff')
         ctx.strokeStyle = '#1a1a1a'

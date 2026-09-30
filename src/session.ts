@@ -53,9 +53,12 @@ export interface Status {
   /** 자유 탐색 남은 ms */
   exploreRemain: number | null
   /** 기능 소개 진행 · 지금 단계 이름 · 전체 순서(진행자용) */
-  introStep: { i: number; n: number } | null
+  introStep: { i: number; n: number; met: boolean; key: string } | null
   introDone: boolean
-  introOrder: string[]
+  /** 전체 순서 — 이름 · 그 동작을 했는가 */
+  introOrder: Array<{ name: string; met: boolean }>
+  /** 기능 소개 경과 ms */
+  introElapsed: number | null
   /** 구간 1 앞의 화면 비우기가 끝났는가 */
   cleared: boolean
   /** [소리 확인]을 눌러 오디오가 열렸는가 */
@@ -145,6 +148,9 @@ let imageSel: string | null = null
 let exploreAt: number | null = null
 let introFinished = false
 let introLastStep = 0
+let introAt: number | null = null
+/** 기능 소개에서 동작을 한 단계들 (key) — 복구 때 되살린다 */
+const introMet = new Set<string>()
 /** 마킹 눌림 확인 (G10 개정) — 이름 → 밝기가 끝나는 시각 */
 const acks = new Map<string, number>()
 let seg2At: number | null = null
@@ -196,6 +202,10 @@ function frozenReason(): string | null {
 }
 
 const openRects = () => (panelOpen === 'sound' ? soundRects(sess.slots.sounds) : panelRects(sess.slots.panel))
+
+log.subscribe((l) => {
+  if (sess.phase === 'briefing' && !cleared) intro.feed(l)
+})
 
 log.setContext(() => ({ seg: sess.seg, phase: sess.phase, canvas: cur().n, state: { ...sess.state } }))
 
@@ -455,7 +465,7 @@ export function endExploreEarly(): void {
   endExplore('facilitator')
 }
 
-/** 기능 소개 — 탐색에서 만든 화면 그대로, 참여자 손으로 (V1.0 §4-4) */
+/** 기능 소개 — 탐색에서 만든 화면 그대로, 참여자 손으로. 화면이 한 단계씩 알리고 진행자는 읽지 않는다 (R-014) */
 export function startIntro(): void {
   if (sess.phase === 'explore') endExplore('facilitator')
   if (sess.phase !== 'recall') return
@@ -464,6 +474,8 @@ export function startIntro(): void {
   setPhase('briefing')
   introFinished = false
   introLastStep = 0
+  introMet.clear()
+  introAt = log.now()
   log.log('phase.start', { phase: 'briefing', by: 'facilitator' })
   showIntro(0)
 }
@@ -471,19 +483,31 @@ export function startIntro(): void {
 function showIntro(at: number): void {
   const steps = intro.buildSteps(sess.slots)
   if (!BRIEFING_BANNER) return
-  intro.show(
-    fit,
-    steps,
-    at,
-    (i, st) => {
+  intro.show(fit, steps, at, [...introMet], {
+    now: () => log.now(),
+    onStep: (i, st) => {
       introLastStep = i
       log.log('intro.step', { i, key: st.key })
     },
-    () => {
-      introFinished = true
-      log.log('intro.done', {})
+    onMet: (i, st, since) => {
+      introMet.add(st.key)
+      log.log('intro.met', { i, key: st.key, since })
     },
-  )
+    onLeave: (i, st, info) => {
+      log.log('intro.leave', { i, key: st.key, dwell: info.dwell, met: info.met, by: info.by, dir: info.dir })
+    },
+    onFinish: () => {
+      introFinished = true
+      log.log('intro.done', { dur: introAt === null ? null : log.now() - introAt, met: introMet.size })
+    },
+  })
+}
+
+/** 시트 [이 단계 넘기기] — 참여자가 동작을 하지 못해 막혔을 때만 */
+export function skipIntroStep(): void {
+  if (sess.phase !== 'briefing' || cleared || !intro.isShown()) return
+  log.log('facilitator', { action: 'briefing.skip', key: intro.current()?.key })
+  intro.skip()
 }
 
 /** 과제문 낭독 뒤 — 구간 1. 화면을 비우지 않았으면 여기서 비운다. 어느 창작 전 단계에서든 넘어갈 수 있다(건너뛴 단계는 로그에 그대로 남는다) */
@@ -653,6 +677,8 @@ export async function abandon(): Promise<void> {
   exploreAt = null
   introFinished = false
   introLastStep = 0
+  introAt = null
+  introMet.clear()
   cleared = false
   imageSel = null
   unlockWall = null
@@ -684,7 +710,8 @@ export function status(): Status {
     exploreRemain: sess.phase === 'explore' && exploreAt !== null ? Math.max(0, T_EXPLORE - (log.now() - exploreAt)) : null,
     introStep: intro.progress(),
     introDone: introFinished,
-    introOrder: sess.slots.bottom.length ? intro.buildSteps(sess.slots).map((x) => intro.STEP_NAME[x.key] ?? x.key) : [],
+    introOrder: sess.slots.bottom.length ? intro.buildSteps(sess.slots).map((x) => ({ name: intro.STEP_NAME(x.key), met: x.need === null || introMet.has(x.key) })) : [],
+    introElapsed: sess.phase === 'briefing' && introAt !== null ? log.now() - introAt : null,
     cleared,
     audioReady: audioReady(),
     pid: sess.pid,
@@ -898,6 +925,8 @@ function replay(events: log.Line[]): void {
   exploreAt = null
   introFinished = false
   introLastStep = 0
+  introAt = null
+  introMet.clear()
   cleared = false
   imageSel = null
   opsInSeg = 0
@@ -1039,6 +1068,10 @@ function replay(events: log.Line[]): void {
       case 'phase.start':
         opsInSeg = 0
         if (e.phase === 'explore') exploreAt = Number(e.t)
+        if (e.phase === 'briefing') introAt = Number(e.t)
+        break
+      case 'intro.met':
+        introMet.add(String(e.key))
         break
       case 'intro.step':
         introLastStep = Number(e.i)

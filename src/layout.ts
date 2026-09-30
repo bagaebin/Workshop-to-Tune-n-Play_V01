@@ -122,14 +122,18 @@ export function imageCornerRect(im: Image, c: Corner): Rect {
   }
 }
 
-/** 노트 손잡이 — 선택된 노트의 양 끝. 끝에서 바깥으로 NOTE_EDGE/2, 안으로는 몸통의 1/3까지 */
+/**
+ * 노트 손잡이 — 선택된 노트의 양 끝. 끝에서 **바깥으로** 20, 안으로는 긴 노트에서만 8까지 (합 NOTE_EDGE).
+ * 기본 길이(≈38 px)의 짧은 노트는 몸통 전체가 옮기기로 남는다 — 손잡이가 몸통을 덮으면 옮길 수 없다 (09.30)
+ */
 export function noteHandleRects(r: Rect): { l: Rect; r: Rect } {
-  const inner = Math.min(NOTE_EDGE / 2, r.w / 3)
+  const outer = NOTE_EDGE - 8
+  const inner = clamp((r.w - 40) / 2, 0, 8)
   const y = r.y - NOTE_HIT_SLOP
   const h = r.h + NOTE_HIT_SLOP * 2
   return {
-    l: { x: r.x - NOTE_EDGE / 2, y, w: NOTE_EDGE / 2 + inner, h },
-    r: { x: r.x + r.w - inner, y, w: NOTE_EDGE / 2 + inner, h },
+    l: { x: r.x - outer, y, w: outer + inner, h },
+    r: { x: r.x + r.w - inner, y, w: outer + inner, h },
   }
 }
 

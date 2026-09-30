@@ -358,6 +358,29 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
         out.append((all(not e.get("acted") and e.get("reason") == "recall" for e in frozen), f"기대 회고 중 접촉 {len(frozen)}건 acted:false reason:recall"))
         steps = [e for e in events if e.get("type") == "intro.step"]
         out.append((all("key" in e and isinstance(e.get("i"), int) and e.get("key") != "absent" for e in steps), f"intro.step {len(steps)}건 i · key"))
+        # 단계별 튜토리얼 (R-014) — 동작을 해야 [다음]. 마킹 · 맺음만 예외
+        leaves = [e for e in events if e.get("type") == "intro.leave"]
+        if leaves:
+            mets = [e for e in events if e.get("type") == "intro.met"]
+            met_at = {e.get("key"): e.get("seq") for e in mets}
+            FREE = ("mark", "end")
+            ok = True
+            for lv in leaves:
+                k = lv.get("key")
+                has = k in FREE or (k in met_at and met_at[k] < lv.get("seq"))
+                ok &= lv.get("met") == has
+                if lv.get("dir") == 1 and lv.get("by") == "participant":
+                    ok &= has
+            out.append((ok, f"intro.leave {len(leaves)}건 — 참여자가 앞으로 넘긴 단계는 전부 동작을 한 뒤(intro.met {len(mets)}건)"))
+            forced = [lv.get("key") for lv in leaves if lv.get("by") == "facilitator"]
+            fac_skips = [e for e in events if e.get("type") == "facilitator" and e.get("action") == "briefing.skip"]
+            out.append((len(forced) == len(fac_skips), f"진행자가 넘긴 단계 {forced or '없음'}"))
+            bs = next((e for e in events if e.get("type") == "phase.start" and e.get("phase") == "briefing"), None)
+            dn = next((e for e in events if e.get("type") == "intro.done"), None)
+            if bs and dn:
+                seen = {e.get("key") for e in steps}
+                never = sorted(seen - set(met_at) - set(FREE))
+                out.append((True, f"(참고) 기능 소개 {dn.get('t', 0) - bs.get('t', 0)} ms · 본 단계 {len(seen)} · 동작하지 않은 단계 {never or '없음'}"))
         lk = next((e for e in events if e.get("type") == "lock.apply"), None)
         if lk:
             pn = lk.get("p_norm", {})

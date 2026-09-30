@@ -60,7 +60,9 @@
 | `audio.unlock` | `by` `at:'seg-1'` `wall` — 준비 화면 [소리 확인]. 헤더 바로 뒤 | ✔ |
 | `image.select` | `id` `img` `on` | ✔ |
 | `intro.step` | `i` `key` — 띠에 그 단계가 보일 때마다(이전으로 돌아가도) | ✔ |
-| `intro.done` | — | ✔ |
+| `intro.met` | `i` `key` `since` — 그 단계의 동작을 처음 했다 (R-014) | ✔ |
+| `intro.leave` | `i` `key` `dwell` `met` `by` `dir` (R-014) | ✔ |
+| `intro.done` | `dur` `met` | ✔ |
 
 `vals[]` 원소 = `{ on, pitch, len, vel, tone }`. `touch.move`는 `MOVE_COALESCE`(16 ms)로 병합.
 

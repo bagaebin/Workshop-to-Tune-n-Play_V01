@@ -28,6 +28,12 @@ let flushTimer: number | null = null
 let listenersBound = false
 let snapSeq = 0
 
+/** 기록되는 줄을 지켜본다 — 기능 소개가 "그 동작을 했는가"를 여기서 안다. 복구 재생 중에는 불리지 않는다 */
+const listeners: Array<(l: Line) => void> = []
+export function subscribe(fn: (l: Line) => void): void {
+  listeners.push(fn)
+}
+
 export function setContext(fn: () => LogCtx): void {
   ctxProvider = fn
 }
@@ -140,6 +146,7 @@ export function log(type: string, fields: Line = {}, targetMat: 'sound' | 'image
   if (type !== 'touch.move') {
     mirror()
     scheduleFlush()
+    for (const fn of listeners) fn(line)
   }
   return line
 }

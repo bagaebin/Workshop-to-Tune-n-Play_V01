@@ -19,6 +19,7 @@ export interface FacApi {
   soundCheck(): Promise<boolean>
   endExploreEarly(): void
   startIntro(): void
+  skipIntroStep(): void
   expectData(): Promise<{ slots: ExpectRow[]; acts: Array<{ label: string; count: number }> }>
   clearWorkspace(): void
   startSeg1(): void
@@ -57,6 +58,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
   let reviewEl: HTMLElement | null = null
   let reviewLoaded = false
   let expectEl: HTMLElement | null = null
+  let introEl: HTMLElement | null = null
   const checks: Record<string, boolean> = {}
   let lockRule: LockRule = 'v0.3'
   let pid = ''
@@ -177,6 +179,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
     panel.replaceChildren()
     statusEl = null
     expectEl = null
+    introEl = null
     meterEl = null
     meterThrEl = null
     reviewEl = null
@@ -270,9 +273,12 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
     }
     if (st.phase === 'briefing' && !st.cleared) {
       panel.append(h('기능 소개 (7분)'))
-      panel.append(p('말 — "이제 이게 뭘 하는 건지 하나씩 알려드릴게요. 직접 한 번씩 눌러보시면 됩니다."\n스크립트 4/5장의 문장을 그대로(화면 띠에 같은 문장이 나온다). 동작만, 용도는 말하지 않는다. 시연하지 않고 참여자 손으로.\n소개하지 않는다 — 이미지 패널의 「여기 없다」 칸 · 마킹을 언제 누르는지.'))
-      panel.append(p(`순서 (이 참여자)\n${st.introOrder.map((n, i) => `${i + 1}. ${n}`).join('\n')}`))
-      panel.append(p(st.introDone ? '소개 끝.' : `진행 ${st.introStep ? `${st.introStep.i + 1} / ${st.introStep.n}` : '—'}`))
+      panel.append(p('여는 말 한 문장만 — "이제 이게 뭘 하는 건지 화면이 하나씩 알려드릴 거예요. 직접 한 번씩 해보시고 [다음]을 누르시면 됩니다."\n그 뒤로는 읽지 않는다. 질문받으면 화면의 문장을 가리킨다. 시연하지 않는다. 용도는 말하지 않는다.\n참여자가 그 동작을 하면 [다음]이 켜진다(마킹 · 맺음은 처음부터 켜져 있다).'))
+      introEl = p('')
+      panel.append(introEl)
+      panel.append(button('이 단계 넘기기 (막혔을 때만)', () => {
+        api.skipIntroStep()
+      }, { small: true, disabled: st.introDone }))
     }
     if (st.seg === 0) {
       const skipping = st.phase !== 'briefing'
@@ -393,6 +399,12 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
       const pct = Math.min(100, (mic.getLevel() / 0.2) * 100)
       meterEl.style.width = `${pct.toFixed(1)}%`
       meterThrEl.style.left = `${Math.min(100, (mic.getThreshold() / 0.2) * 100).toFixed(1)}%`
+    }
+    if (introEl) {
+      const s = api.status()
+      const head = s.introDone ? '소개 끝.' : s.introStep ? `진행 ${s.introStep.i + 1} / ${s.introStep.n} · ${s.introStep.met ? '[다음] 켜짐' : '동작을 기다리는 중'}` : '—'
+      const el = s.introElapsed === null ? '' : ` · 경과 ${mmss(s.introElapsed)} / 7:00`
+      introEl.textContent = `${head}${el}\n${s.introOrder.map((o, i) => `${o.met ? '●' : '○'} ${i + 1}. ${o.name}${s.introStep && s.introStep.i === i && !s.introDone ? '  ◀' : ''}`).join('\n')}`
     }
     if (!statusEl) return
     const st = api.status()

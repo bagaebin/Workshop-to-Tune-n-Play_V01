@@ -161,7 +161,7 @@ const gone = new Set<string>()
 const held = new Map<number, { h: audio.Handle; at: number }>()
 const drags = new Map<number, notes.Edit>()
 const imageDrags = new Map<number, imageOps.ImageEdit>()
-/** 선택되지 않은 이미지 위에서 시작한 접촉 — 탭이면 선택, 누르기·끌기면 노트 (D4) */
+/** 이미지 몸통에서 시작한 접촉 — 탭·누르기면 그 위에 노트(D4), 끌기면 옮기기 (R-013 #4 안 B) */
 const imageTouches = new Map<number, { id: string; x: number; y: number }>()
 const sliderDrags = new Map<number, { name: 'step' | 'spread'; prev: number }>()
 const closedInput = new Set<number>()
@@ -1145,13 +1145,10 @@ function onDown(d: DownInfo): void {
   void audio.resume()
   const cv = cur()
   // 선택된 이미지 밖을 닿으면 선택이 풀린다
-  if (imageSel !== null && !d.target.startsWith(`image.move:${imageSel}`) && !d.target.startsWith(`image.size:${imageSel}`)) deselectImage()
-  if (d.target.startsWith('image:')) {
-    // 탭이면 선택, 누르기·끌기면 노트 — 뗄 때 갈린다. 소리는 그때 난다
-    imageTouches.set(d.pointerId, { id: d.target.slice(6), x: d.x, y: d.y })
-    return
-  }
-  if (d.target === 'surface') {
+  if (imageSel !== null && d.target !== `image:${imageSel}` && !d.target.startsWith(`image.size:${imageSel}`)) deselectImage()
+  // 이미지 몸통 — 탭·누르기면 노트, 끌기면 옮기기. 뗄 때(또는 끌기가 확정될 때) 갈린다
+  if (d.target.startsWith('image:')) imageTouches.set(d.pointerId, { id: d.target.slice(6), x: d.x, y: d.y })
+  if (d.target === 'surface' || d.target.startsWith('image:')) {
     // 손 모드 — 손 노트는 놓는 즉시 발음. 규칙·난수는 뗄 때 열이 놓이며 1회 재생된다
     if (sess.state.gen === 'hand') {
       const at = audio.currentTime()
@@ -1190,12 +1187,20 @@ function onMove(m: MoveInfo): void {
     labelOps.apply(cv, le, m.x - m.x0)
     return
   }
-  if (m.target.startsWith('image.move:') || m.target.startsWith('image.size:')) {
+  if (m.target.startsWith('image:') || m.target.startsWith('image.size:')) {
     let e = imageDrags.get(m.pointerId)
     if (!e) {
-      const kind = m.target.startsWith('image.move:') ? 'move' : 'size'
-      const [id, corner] = m.target.slice(11).split(':')
-      e = imageOps.begin(cv, id ?? '', kind, (corner as Corner | undefined) ?? null) ?? undefined
+      if (m.target.startsWith('image:')) {
+        // 끌기가 확정됐다 — 옮기기. 닿을 때 난 소리는 끊고, 옮기는 이미지가 선택된다(손잡이가 보인다)
+        releaseHeld(m.pointerId)
+        imageTouches.delete(m.pointerId)
+        e = imageOps.begin(cv, m.target.slice(6), 'move') ?? undefined
+        const im = imageById(cv, m.target.slice(6))
+        if (e && im) selectImage(im)
+      } else {
+        const [id, corner] = m.target.slice(11).split(':')
+        e = imageOps.begin(cv, id ?? '', 'size', (corner as Corner | undefined) ?? null) ?? undefined
+      }
       if (!e) return
       imageDrags.set(m.pointerId, e)
     }
@@ -1301,35 +1306,39 @@ function handleGesture(g: Gesture): void {
     return
   }
 
-  // 선택된 이미지 — 가운데 끌기 = 옮기기(면 밖에서 떼면 제거) · 모서리 끌기 = 크기 · 가운데 탭 = 선택 해제
-  if (t.startsWith('image.move:') || t.startsWith('image.size:')) {
+  // 이미지 모서리 손잡이 — 크기
+  if (t.startsWith('image.size:')) {
     const e = imageDrags.get(g.pointerId)
     imageDrags.delete(g.pointerId)
     if (g.kind === 'drag' && e) {
-      if (e.kind === 'move' && !inSurface) {
+      imageOps.commit(cv, e)
+      opsInSeg++
+    }
+    return
+  }
+
+  // 이미지 몸통 — 끌기 = 옮기기(면 밖에서 떼면 제거) · 탭·누르기 = 그 위에 손으로 친다 (D4 · R-013 #4 안 B)
+  if (t.startsWith('image:')) {
+    const it = imageTouches.get(g.pointerId)
+    imageTouches.delete(g.pointerId)
+    const e = imageDrags.get(g.pointerId)
+    imageDrags.delete(g.pointerId)
+    if (g.kind === 'drag') {
+      releaseHeld(g.pointerId)
+      if (!e) return
+      if (!inSurface) {
         imageOps.remove(cv, e)
         imageSel = null
       } else imageOps.commit(cv, e)
       opsInSeg++
-    } else if (g.kind === 'tap' && t.startsWith('image.move:')) deselectImage()
-    return
-  }
-
-  // 선택되지 않은 이미지 — 탭 = 선택(손잡이가 보인다) · 누르기·끌기 = 그 위에 손으로 친다 (D4)
-  if (t.startsWith('image:')) {
-    const it = imageTouches.get(g.pointerId)
-    imageTouches.delete(g.pointerId)
-    const im = imageById(cv, t.slice(6))
-    if (!im) return
-    if (g.kind === 'tap') {
-      selectImage(im)
       return
     }
+    const im = imageById(cv, t.slice(6))
+    releaseHeld(g.pointerId, g.kind === 'tap' ? LEN_DEFAULT : 0)
+    if (!im) return
     material.imageTouch(im, it?.x ?? g.x0, it?.y ?? g.y0)
-    if (sess.state.gen === 'hand') {
-      const n = notes.addFromGesture(cv, g, 'image')
-      audio.play({ ...n, on: 0, pitch: soundPitch(n.pitch) })
-    } else gen.column(cv, sess.state, params, sess.seed, g)
+    if (sess.state.gen === 'hand') notes.addFromGesture(cv, g, 'image')
+    else gen.column(cv, sess.state, params, sess.seed, g)
     opsInSeg++
     return
   }

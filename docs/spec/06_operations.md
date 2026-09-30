@@ -17,7 +17,7 @@
 | §6-5 | `ops/play.ts` | `axis` 탭 = `playFrom` · 재생 슬롯 = 시작/정지 · `heard[]` · `matches_scope` |
 | §6-6 | `ops/material.ts` | **V1.0 §3** 소리도 이미지처럼 슬롯 탭 → 목록 → 칸을 끌어 놓기 · 탭 = 열람 `mat.peek` · 끌어 놓기 = 채택 `mat.adopt`(캔버스 첫 회만) + `note.add src:material` / `image.place` |
 | §6-7 | `ops/text.ts` | 빈 면 슬롯 → 입력 칸 → 칩(3) → 면에 놓으면 음절 = 노트 + 라벨 · 띠에 놓으면 라벨만 · `text.abort`(≤3자) · `image.absent` |
-| §6-8 | `ops/image.ts` | **V1.0 §3** 탭 = 선택(`image.select`) → 네 모서리 48×48 = 크기 · 가운데 끌기 = 옮기기 · 3:2 고정 · 면 밖 = 제거 · 노트 아래에 그림 |
+| §6-8 | `ops/image.ts` | **R-013 #4 안 B** 몸통 탭 · 누르기 = 노트 · 몸통 끌기 = 옮기기(+ 선택 `image.select`) · 선택되면 네 모서리 48×48 = 크기 · 3:2 고정 · 면 밖 = 제거 · 노트 아래에 그림 |
 | §6-9 | `ops/canvas.ts` | keep/discard/switch/evict · 캔버스별 `mat·playFrom·selection` · 떠나는 캔버스 스냅샷 |
 | §6-10 | `ops/buttons.ts` | `mark`(스냅샷 · **V1.0 §3-1 — 버튼만 250 ms 밝아진다**, 그 밖의 화면 · 소리 변화 없음) · `done`은 V1.0에서 삭제 |
 

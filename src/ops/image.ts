@@ -1,8 +1,10 @@
 /**
  * ops/image.ts — 이미지 손잡이 (기능 명세 V1.0 §3 · §3-2 · SPEC §6-8) — 크기 조정은 절단 후보 #2
  *
- * 놓은 이미지 탭 = 선택 → 네 모서리에 손잡이(HANDLE)               → image.select {id, img, on}
- * 선택된 이미지의 가운데 끌기 = 옮기기 · 작업 면 밖에서 뗌 = 제거     → image.move · image.remove
+ * 몸통 끌기 = 옮기기(선택돼 있지 않아도) · 작업 면 밖에서 뗌 = 제거   → image.move · image.remove
+ * 놓거나 옮기면 선택 → 네 모서리에 손잡이(HANDLE). 다른 곳을 닿으면 풀린다 → image.select {id, img, on}
+ * 몸통 탭 · 누르기 = 그 위에 노트 (D4 — session.ts)                   → image.touch + note.add
+ * 이미지 선택은 하나뿐. 복수 선택 · 「전체」에 들어가지 않는다 (09.30 결정)
  * 모서리 끌기 = 크기. 3:2 고정, [IMG_MIN, IMG_MAX], 맞은편 모서리 고정  → image.size {corner}
  * 끌기 중 실시간, 뗄 때 한 번 기록 (노트 고치기와 같은 방식).
  */

@@ -110,7 +110,7 @@ export function labelRect(l: Label): Rect {
   return l.onAxis ? { x: l.x, y: AXIS.y + 6, w, h: 36 } : { x: l.x, y: l.y - NOTE_H / 2 - 22, w, h: 18 }
 }
 
-/** 이미지 손잡이 — 선택된 이미지의 네 모서리 (V1.0 §3-2). 가운데는 옮기기 */
+/** 이미지 손잡이 — 선택된 이미지의 네 모서리 (V1.0 §3-2). 몸통 끌기는 옮기기 */
 export type Corner = 'nw' | 'ne' | 'sw' | 'se'
 export const CORNERS: readonly Corner[] = ['nw', 'ne', 'sw', 'se']
 export function imageCornerRect(im: Image, c: Corner): Rect {
@@ -322,10 +322,10 @@ export function hitTest(x: number, y: number, c: HitCtx): string {
     if (inRect(r, x, y)) return `note:${n.id}`
   }
   for (const l of c.labels) if (!l.onAxis && inRect(labelRect(l), x, y)) return `label:${l.id}`
-  // 이미지 몸통은 노트 아래 — 나중에 놓은 것이 위. 선택된 이미지의 몸통은 옮기기
+  // 이미지 몸통은 노트 아래 — 나중에 놓은 것이 위. 탭 · 누르기 = 노트, 끌기 = 옮기기 (R-013 #4 안 B)
   for (let i = c.images.length - 1; i >= 0; i--) {
     const im = c.images[i]
-    if (im && inRect(im, x, y)) return im.id === c.imageSel ? `image.move:${im.id}` : `image:${im.id}`
+    if (im && inRect(im, x, y)) return `image:${im.id}`
   }
   if (inRect(SURFACE, x, y)) return 'surface'
   return 'none'

@@ -38,7 +38,7 @@ interface Def {
 }
 
 /**
- * 고정 문장 — 진행자 스크립트 V02 4/5장의 15문장을 동작 하나씩으로 쪼갠 것. ★는 스크립트에 없던 문장(앱에 있는 기능이라 넣었다).
+ * 고정 문장 — 진행자 스크립트 V02 4/5장의 15문장을 동작 하나씩으로 쪼갠 것. 옮기기 · 소리 듣기 · 남긴 것으로 돌아가기는 스크립트 V02에 없던 문장(09.30 두기로 결정).
  * 바꾸려면 볼트 「기능 소개 단계표」를 먼저 고친다.
  */
 const DEFS: Readonly<Record<string, Def>> = {
@@ -47,7 +47,7 @@ const DEFS: Readonly<Record<string, Def>> = {
   select: { name: '선택', text: '면에 놓인 걸 누르면 선택됩니다. 한 번 더 누르면 풀려요.', need: (l) => isTap(l) && String(l.target).startsWith('note') },
   'select.many': { name: '여러 개 선택', text: '잇달아 누르면 여러 개가 같이 선택됩니다.', need: on('scope.set', (l) => l.scope === 'many' && Number(l.count) >= 2) },
   length: { name: '길이', text: '선택하면 양 끝에 손잡이가 생기는데, 그걸 끌면 길이가 바뀝니다.', need: on('note.edit', (l) => l.field === 'len') },
-  move: { name: '옮기기 ★', text: '놓인 걸 끌면 옮겨집니다.', need: on('note.edit', (l) => l.field === 'pos') },
+  move: { name: '옮기기', text: '놓인 걸 끌면 옮겨집니다.', need: on('note.edit', (l) => l.field === 'pos') },
   remove: { name: '지우기', text: '놓인 걸 없애려면 면 밖으로 끌어내시면 됩니다.', need: on('note.remove') },
 
   'mat.blank': { name: '빈 면 — 열기', text: '이걸 누르면 글자를 적는 칸이 나옵니다.', need: on('text.open', (l) => l.source === 'chip'), pos: 'top' },
@@ -55,7 +55,7 @@ const DEFS: Readonly<Record<string, Def>> = {
   'mat.blank.place': { name: '빈 면 — 조각 놓기', text: '그 조각을 면이나 위쪽 띠로 끌어다 놓을 수 있어요.', need: on('text.place'), pos: 'top' },
 
   'mat.sound': { name: '소리 — 열기', text: '이걸 누르면 미리 만들어 둔 소리들이 나옵니다.', need: on('mat.peek', (l) => l.mat === 'sound' && l.id === undefined) },
-  'mat.sound.peek': { name: '소리 — 듣기 ★', text: '하나를 누르면 그 소리가 들립니다.', need: on('mat.peek', (l) => l.mat === 'sound' && typeof l.id === 'string') },
+  'mat.sound.peek': { name: '소리 — 듣기', text: '하나를 누르면 그 소리가 들립니다.', need: on('mat.peek', (l) => l.mat === 'sound' && typeof l.id === 'string') },
   'mat.sound.place': { name: '소리 — 놓기', text: '하나를 면으로 끌어다 놓으면 그 소리가 놓여요.', need: on('note.add', (l) => l.src === 'material') },
 
   'mat.image': { name: '이미지 — 열기', text: '이걸 누르면 이미지가 여러 장 나옵니다.', need: on('mat.peek', (l) => l.mat === 'image') },
@@ -78,7 +78,7 @@ const DEFS: Readonly<Record<string, Def>> = {
 
   mark: { name: '마킹', text: '이건 마킹이에요. 누르면 버튼이 잠깐 밝아졌다 돌아오고 화면은 그대로입니다. 아무 때나 누르셔도 되고, 안 누르셔도 됩니다.', need: null },
   'canvas.keep': { name: '남기고 새로', text: '지금 화면을 남겨두고 빈 면에서 새로 시작합니다.', need: on('canvas.new', (l) => l.reason === 'keep') },
-  'canvas.keep.back': { name: '남긴 것으로 ★', text: '남긴 건 왼쪽 목록에 쌓여요. 누르면 그 화면으로 돌아갑니다.', need: on('canvas.switch') },
+  'canvas.keep.back': { name: '남긴 것으로', text: '남긴 건 왼쪽 목록에 쌓여요. 누르면 그 화면으로 돌아갑니다.', need: on('canvas.switch') },
   'canvas.discard': { name: '지우고 새로', text: '지금 화면을 지우고 빈 면에서 새로 시작합니다.', need: on('canvas.discard') },
   end: { name: '맺음', text: '이게 전부예요. 더 없습니다.', need: null },
 }

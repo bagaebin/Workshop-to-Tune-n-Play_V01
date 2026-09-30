@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | 날짜 | 2026-09-30 |
-| 상태 | 승인(사용자 09.30 — 가~마 권고대로) · 문장 ★ 셋 확인 대기 |
+| 상태 | 승인(사용자 09.30 — 가~마 권고대로 · 새 문장 셋 둔다) |
 | SPEC | SPEC_V1.0.md §4-4 · §7-1 |
 | 코드 | `src/intro.ts` · `src/session.ts` · `src/facilitator.ts` · `src/log.ts`(`subscribe`) · `tools/chain.py` |
 

@@ -13,13 +13,13 @@
 | 3 | `select` | 면에 놓인 걸 누르면 선택됩니다. 한 번 더 누르면 풀려요. | 놓인 것 탭 |
 | 4 | `select.many` | 잇달아 누르면 여러 개가 같이 선택됩니다. | `scope.set {scope:many, count ≥ 2}` |
 | 5 | `length` | 선택하면 양 끝에 손잡이가 생기는데, 그걸 끌면 길이가 바뀝니다. | `note.edit {field:len}` |
-| 6 | `move` ★ | 놓인 걸 끌면 옮겨집니다. | `note.edit {field:pos}` |
+| 6 | `move` | 놓인 걸 끌면 옮겨집니다. | `note.edit {field:pos}` |
 | 7 | `remove` | 놓인 걸 없애려면 면 밖으로 끌어내시면 됩니다. | `note.remove` |
 | 8 | `mat.blank` | 이걸 누르면 글자를 적는 칸이 나옵니다. | `text.open` |
 | 9 | `mat.blank.commit` | 적고 나면 작은 조각으로 이 칸에 붙습니다. | `text.commit` |
 | 10 | `mat.blank.place` | 그 조각을 면이나 위쪽 띠로 끌어다 놓을 수 있어요. | `text.place` |
 | 11 | `mat.sound` | 이걸 누르면 미리 만들어 둔 소리들이 나옵니다. | `mat.peek {mat:sound}` |
-| 12 | `mat.sound.peek` ★ | 하나를 누르면 그 소리가 들립니다. | `mat.peek {mat:sound, id}` |
+| 12 | `mat.sound.peek` | 하나를 누르면 그 소리가 들립니다. | `mat.peek {mat:sound, id}` |
 | 13 | `mat.sound.place` | 하나를 면으로 끌어다 놓으면 그 소리가 놓여요. | `note.add {src:material}` |
 | 14 | `mat.image` | 이걸 누르면 이미지가 여러 장 나옵니다. | `mat.peek {mat:image}` |
 | 15 | `mat.image.place` | 마찬가지로 면으로 끌어다 놓으실 수 있어요. | `image.place` |
@@ -39,7 +39,7 @@
 | 29 | `all` | 이걸 누르면 면에 있는 게 전부 선택됩니다. 한 번 더 누르면 풀려요. | 슬롯 탭 |
 | 30 | `mark` | 이건 마킹이에요. 누르면 버튼이 잠깐 밝아졌다 돌아오고 화면은 그대로입니다. 아무 때나 누르셔도 되고, 안 누르셔도 됩니다. | **없음 — 처음부터 켜져 있다** |
 | 31 | `canvas.keep` | 지금 화면을 남겨두고 빈 면에서 새로 시작합니다. | `canvas.new {reason:keep}` |
-| 32 | `canvas.keep.back` ★ | 남긴 건 왼쪽 목록에 쌓여요. 누르면 그 화면으로 돌아갑니다. | `canvas.switch` |
+| 32 | `canvas.keep.back` | 남긴 건 왼쪽 목록에 쌓여요. 누르면 그 화면으로 돌아갑니다. | `canvas.switch` |
 | 33 | `canvas.discard` | 지금 화면을 지우고 빈 면에서 새로 시작합니다. | `canvas.discard` |
 | 34 | `end` | 이게 전부예요. 더 없습니다. | 없음 |
 
@@ -63,5 +63,5 @@
 ## 열린 항목
 
 - [ ] iPad에서 실제 소요 시간 — 34단계 × 약 12초 = 7분이 빠듯하다. 넘으면 단계를 합친다(후보: 손 · 규칙 · 난수의 「켜기」와 「면에 대기」)
-- [ ] ★ 문장 셋(옮기기 · 소리 듣기 · 남긴 것으로 돌아가기) 승인
+- [x] 문장 셋(옮기기 · 소리 듣기 · 남긴 것으로 돌아가기) — 둔다(사용자 09.30). V1.0 §3 표 · 스크립트에 추가 제안
 - [ ] 적기 단계에서 iPad 키보드가 떴을 때 띠 · 입력 칸 · 밝힌 슬롯이 겹치지 않는가

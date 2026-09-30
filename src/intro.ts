@@ -7,7 +7,7 @@
  *   3 판정하지 않는다 — 동작을 하면 [다음]이 켜질 뿐. 칭찬 · 체크 표시 · 소리 없음 (K3)
  *   4 시범을 보이지 않는다 — 움직이는 손가락 · 예시 배치 · 자동 재생 없음. 어디에 놓는지는 참여자의 선택이다
  *   5 마킹은 기준을 주지 않는다 — 누르지 않아도 [다음]이 켜져 있다
- * 소개하지 않는 것 — 이미지 패널의 「여기 없다」 칸 · 마킹을 언제 누르는지.
+ * 소개하지 않는 것 — 이미지 패널의 「여기 없다」 칸. 마킹은 뜻(지목)만 말하고 기준(언제)은 주지 않는다 (PI-019).
  * 글자는 이 단계에만 있다. 끝나면 화면은 다시 글자 없는 상태로 돌아간다(우 3 제외).
  * 소개 중에도 모든 기능은 평소대로 동작한다 — 밝히는 것은 표시일 뿐이다.
  */
@@ -67,16 +67,16 @@ const DEFS: Readonly<Record<string, Def>> = {
   grid: { name: '격자', text: '이걸 누르면 화면에 눈금이 생기고, 한 번 더 누르면 사라집니다.', need: (l) => (l.type === 'grid.on' || l.type === 'grid.off') && l.by === 'user' },
   'gen.hand': { name: '손 — 켜기', text: '이걸 누르면 켜집니다.', need: tapOn('slot:gen.hand') },
   'gen.hand.use': { name: '손 — 면에 대기', text: '이게 켜져 있으면 면에 댈 때 하나씩 놓입니다.', need: on('note.add', (l) => l.src === 'touch') },
-  'gen.rule': { name: '규칙 — 켜기', text: '이걸 켜면 옆에 값 조절이 나옵니다.', need: tapOn('slot:gen.rule') },
+  'gen.rule': { name: '규칙 — 켜기', text: '이걸 켜면 옆에 간격을 조절하는 막대가 나옵니다.', need: tapOn('slot:gen.rule') },
   'gen.rule.use': { name: '규칙 — 면에 대기', text: '면에 대면 일정한 간격으로 여러 개가 놓입니다.', need: on('note.add', (l) => l.src === 'rule') },
-  'gen.random': { name: '난수 — 켜기', text: '이걸 켜도 옆에 값 조절이 나옵니다.', need: tapOn('slot:gen.random') },
+  'gen.random': { name: '난수 — 켜기', text: '이걸 켜면 옆에 흩어지는 정도를 조절하는 막대가 나옵니다.', need: tapOn('slot:gen.random') },
   'gen.random.use': { name: '난수 — 면에 대기', text: '면에 댈 때마다 불규칙하게 놓입니다.', need: on('note.add', (l) => l.src === 'random') },
   play: { name: '재생 — 시작', text: '이걸 누르면 지금까지 놓인 게 처음부터 재생됩니다.', need: on('play.start') },
   'play.stop': { name: '재생 — 멈춤', text: '재생 중에 다시 누르면 멈춰요.', need: on('play.stop') },
   'play.seek': { name: '재생 — 띠', text: '위쪽 띠를 누르면 거기서부터 재생됩니다.', need: on('play.seek') },
   all: { name: '전체', text: '이걸 누르면 면에 있는 게 전부 선택됩니다. 한 번 더 누르면 풀려요.', need: tapOn('slot:all') },
 
-  mark: { name: '마킹', text: '이건 마킹이에요. 누르면 버튼이 잠깐 밝아졌다 돌아오고 화면은 그대로입니다. 아무 때나 누르셔도 되고, 안 누르셔도 됩니다.', need: null },
+  mark: { name: '마킹', text: '이건 마킹이에요. 지금 이 순간을 표시해 두고 싶을 때 누릅니다. 누르면 버튼이 잠깐 밝아졌다 돌아오고 화면은 그대로예요. 아무 때나, 몇 번이든 누르셔도 되고 안 누르셔도 됩니다.', need: null },
   'canvas.keep': { name: '남기고 새로', text: '지금 화면을 남겨두고 빈 면에서 새로 시작합니다.', need: on('canvas.new', (l) => l.reason === 'keep') },
   'canvas.keep.back': { name: '남긴 것으로', text: '남긴 건 왼쪽 목록에 쌓여요. 누르면 그 화면으로 돌아갑니다.', need: on('canvas.switch') },
   'canvas.discard': { name: '지우고 새로', text: '지금 화면을 지우고 빈 면에서 새로 시작합니다.', need: on('canvas.discard') },

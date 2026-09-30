@@ -10,7 +10,7 @@
  */
 import {
   FLASH_FRAMES, UI_IN_MS, VEL_FIXED, TONE_FIXED, LEN_DEFAULT,
-  W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG0_LEN, SEG1_LEN, SEG2_LEN, MARK_FLASH, SEG2_GATED, BRIEFING_BANNER, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR, TEXT_ABORT_CHARS,
+  W, H, L, K_P, K_T, TAU, STEP_DEFAULT, SPREAD_DEFAULT, SEG0_LEN, SEG1_LEN, SEG2_LEN, MARK_FLASH, SEG2_GATED, BRIEFING_BANNER, BOTTOM_LAYOUT, IDLE_LIST_MIN, CUTS, LOCK_RULE, MIC_THR, TEXT_ABORT_CHARS,
 } from './constants'
 import {
   computeFit, toVirtual, shuffledSlots, hitTest, pitchOfY, inRect, panelBlocks, panelRects, soundRects, sliderValue, slotRects, resolveLabels,
@@ -239,7 +239,7 @@ export function init(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): 
         panel: sess.slots.panel,
         sounds: sess.slots.sounds,
         images: cur().images,
-        list: canvasOps.listOrder,
+        list: [cur().n, ...canvasOps.listOrder], // 첫 칸 = 지금 캔버스 (PI-018 #5)
         chips: sess.chips,
         labels: resolveLabels(cur().labels, cur().notes, sess.state.grid),
         sliderVisible: !cut('rule_slider') && (sess.state.gen === 'rule' || sess.state.gen === 'random'),
@@ -373,6 +373,8 @@ function headerFields(wall: string): Record<string, unknown> {
     text_abort_chars: TEXT_ABORT_CHARS,
     cuts: sess.cuts,
     slots_sounds: sess.slots.sounds,
+    sound_set: material.SOUND_SET_LABEL,
+    bottom_layout: BOTTOM_LAYOUT,
     session_structure: 'd15', // 탐색 → 기대 회고 → 기능 소개 → 창작 (V1.0 §7)
     spec: 'V1.0',
     seg0_len_ms: T_EXPLORE,
@@ -1566,7 +1568,7 @@ function frame(): void {
   if (cv.allOn) active.add('all')
   if (play.isPlaying()) active.add('play')
   active.add(`gen.${sess.state.gen}`)
-  const list = canvasOps.listOrder
+  const list = [cv.n, ...canvasOps.listOrder]
     .map((n) => sess.canvases.find((c) => c.n === n))
     .filter((c): c is Canvas => !!c)
     .map((c) => ({ n: c.n, notes: c.notes, images: c.images }))
@@ -1608,6 +1610,7 @@ function frame(): void {
     build: sess.build,
     pressed,
     spotlight: spotlightNow(),
+    dim: sess.phase === 'hold', // 구간 2 전 — 멈춘 화면 (PI-017 안 D)
   }
   draw(ctx2d, fit, view)
   requestAnimationFrame(frame)

@@ -402,7 +402,7 @@ export function initFacilitator(api: FacApi): { open: () => void; close: () => v
     if (!expectEl) return
     expectEl.replaceChildren()
     const sec = (ms: number | null) => (ms === null ? '' : ` · 첫 접촉 ${mmss(ms)}`)
-    const where = (i: number): string => (i < 6 ? `아래 왼쪽 ${i + 1}번째` : i < 9 ? `아래 오른쪽 ${i - 5}번째` : `왼쪽 서랍 위에서 ${i - 8}번째`)
+    const where = (i: number): string => (i < 6 ? `아래 오른쪽 ${i + 1}번째` : i < 9 ? `아래 왼쪽 ${i - 5}번째` : `왼쪽 서랍 위에서 ${i - 8}번째`) // 09.30 배치 — 기능 6 오른쪽 · 세션 버튼 3 왼쪽
     const rows = d.slots.map((r, i) => ({ ...r, where: where(i) }))
     const untouched = rows.filter((r) => r.count === 0)
     const touched = rows.filter((r) => r.count > 0)

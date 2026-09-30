@@ -389,7 +389,11 @@ def checks(header: dict | None, events: list[dict]) -> list[tuple[bool, str]]:
             got = lk.get("pn_margin")
             out.append(((want is None and got is None) or (want is not None and got is not None and abs(want - got) < 1e-3), f"pn_margin {got} (재계산 {want}){' — 잠금 근거 약함' if isinstance(got, (int, float)) and got < 0.08 else ''}"))
         mats = [a for a in adds if a.get("src") == "material"]
-        out.append((all(a.get("sound") in header.get("slots_sounds", []) for a in mats), f"src:material {len(mats)}건 sound ∈ slots_sounds {header.get('slots_sounds')}"))
+        out.append((all(a.get("sound") in header.get("slots_sounds", []) for a in mats), f"src:material {len(mats)}건 sound ∈ slots_sounds {header.get('slots_sounds')} · sound_set {header.get('sound_set')}"))
+        if header.get("sound_set"):
+            n = int(str(header["sound_set"]).split("-s")[-1])
+            pk = [e for e in events if e.get("type") == "mat.peek" and e.get("mat") == "sound" and e.get("id")]
+            out.append((len(header.get("slots_sounds", [])) == n and all(e.get("material_id") == e.get("id") for e in pk) and all(a.get("material_id") == a.get("sound") for a in mats), f"sound_set {header['sound_set']} — 목록 {n}칸 · mat.peek/note.add material_id"))
         sel = [e for e in events if e.get("type") == "image.select"]
         out.append((all("id" in e and isinstance(e.get("on"), bool) for e in sel), f"image.select {len(sel)}건 id · on"))
         szs = [e for e in events if e.get("type") == "image.size"]
@@ -581,6 +585,8 @@ SLOT = 100
 BOTTOM_LEFT_X = [40, 164, 288, 412, 536, 660]
 BOTTOM_RIGHT_X = [854, 978, 1102, 1226]
 BOTTOM_RIGHT_X3 = [916, 1040, 1164]  # V1.0 — 우 3
+BOTTOM_FN_X_SL = [606, 730, 854, 978, 1102, 1226]  # 09.30 session-left — 기능 6 오른쪽
+BOTTOM_SESSION_X_SL = [40, 164, 288]  # 09.30 session-left — 세션 버튼 3 왼쪽
 DRAWER_Y = [32, 168, 304]
 
 
@@ -588,8 +594,11 @@ def slot_rects(header: dict | None) -> list[tuple[str, int, int]]:
     if not header:
         return []
     out = []
-    right = BOTTOM_RIGHT_X3 if header.get("session_structure") == "d15" else BOTTOM_RIGHT_X
-    for name, x in zip(list(header.get("slots_bottom", [])) + ["mark", "canvas.keep", "canvas.discard", "done"], BOTTOM_LEFT_X + right):
+    if header.get("bottom_layout") == "session-left":
+        left, right = BOTTOM_FN_X_SL, BOTTOM_SESSION_X_SL
+    else:
+        left, right = BOTTOM_LEFT_X, (BOTTOM_RIGHT_X3 if header.get("session_structure") == "d15" else BOTTOM_RIGHT_X)
+    for name, x in zip(list(header.get("slots_bottom", [])) + ["mark", "canvas.keep", "canvas.discard", "done"], left + right):
         out.append((name, x, 904))
     for name, y in zip(header.get("slots_drawer", []), DRAWER_Y):
         out.append((f"mat.{name}", 30, y))

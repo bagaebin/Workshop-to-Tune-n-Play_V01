@@ -48,6 +48,10 @@ export const UI_IN_MS = 300            // 전체 UI가 나타나는 시간
 export const SEG2_GATED = true
 /** 기능 소개 중 화면에 문장 띠와 밝히기를 보인다. false면 진행자 낭독만(시트에 순서 표시) */
 export const BRIEFING_BANNER = true
+/** 소리 목록의 재료 수 — 5(s1–s5) 또는 3(s1–s3, 09.29 빌드와 같음). 헤더 `sound_set` (R-015) */
+export const SOUND_SET: 5 | 3 = 5
+/** 하단 띠 배치 — 'session-left': 마킹 · 남기고 새로 · 지우고 새로가 왼쪽(캔버스 목록 아래), 기능 6이 오른쪽 (PI-018 #4). 'session-right': 09.29 배치 */
+export const BOTTOM_LAYOUT: 'session-left' | 'session-right' = 'session-left'
 
 // ── 제어 요소 · 노트 · 이미지
 export const SLOT = 100                // ☐ 제어 요소 한 변

@@ -4,7 +4,7 @@
  * 1단계 — 영역 4 · 슬롯 좌표 · 셔플(시드 = pid) · 좌표↔값 · 히트 테스트는
  * slot.gone · slot:* · axis · note.edge · note · surface · none 까지. panel · chip · canvas · slider · image · label은 3~4단계.
  */
-import { W, H, L, K_P, K_T, MIDI_LO, MIDI_RANGE, SLOT, NOTE_EDGE, FAC_RECT, HANDLE, CHIP_H } from './constants'
+import { W, H, L, K_P, K_T, MIDI_LO, MIDI_RANGE, SLOT, NOTE_EDGE, FAC_RECT, HANDLE, CHIP_H, SOUND_SET, BOTTOM_LAYOUT } from './constants'
 import type { Chip, Image, Label, Note, Slots } from './model'
 
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -15,10 +15,11 @@ export const AXIS: Rect = { x: 160, y: 0, w: 1206, h: 48 }
 export const SURFACE: Rect = { x: 160, y: 48, w: 1206, h: 836 }
 export const BOTTOM: Rect = { x: 0, y: 884, w: 1366, h: 140 }
 
-// ── §3-2 하단 띠 슬롯 9 — 좌 6 + 우 3 (y 904–1004). 기능 명세 V1.0 §2-1 · §5 — `done` 삭제
+// ── §3-2 하단 띠 슬롯 9 — 기능 6(셔플) + 세션 버튼 3(고정) (y 904–1004). 기능 명세 V1.0 §2-1 · §5 — `done` 삭제
+// PI-018 #4 (09.30) — 세션 버튼 셋을 왼쪽(캔버스 목록 아래)에, 기능 여섯을 오른쪽에. 간격 124는 그대로
 export const SLOT_Y = 904
-export const BOTTOM_LEFT_X = [40, 164, 288, 412, 536, 660] as const
-export const BOTTOM_RIGHT_X = [916, 1040, 1164] as const
+export const BOTTOM_FN_X = BOTTOM_LAYOUT === 'session-left' ? ([606, 730, 854, 978, 1102, 1226] as const) : ([40, 164, 288, 412, 536, 660] as const)
+export const BOTTOM_SESSION_X = BOTTOM_LAYOUT === 'session-left' ? ([40, 164, 288] as const) : ([916, 1040, 1164] as const)
 export const BOTTOM_LEFT_DEFAULT = ['grid', 'gen.hand', 'gen.rule', 'gen.random', 'play', 'all'] as const
 export const BOTTOM_RIGHT = ['mark', 'canvas.keep', 'canvas.discard'] as const
 /** 우 3만 글자 (D12 개정 · N5 예외) */
@@ -33,12 +34,13 @@ export const DRAWER_SLOT_POS = [{ x: 30, y: 32 }, { x: 30, y: 168 }, { x: 30, y:
 /** 헤더 slots_drawer 표기(접두사 없음). target은 `slot:mat.<name>` */
 export const DRAWER_DEFAULT = ['blank', 'sound', 'image'] as const
 export const PANEL_DEFAULT = ['i1', 'i2', 'i3', 'i4', 'i5'] as const
-export const SOUNDS_DEFAULT = ['s1', 's2', 's3'] as const
+export const SOUNDS_DEFAULT = SOUND_SET === 5 ? (['s1', 's2', 's3', 's4', 's5'] as const) : (['s1', 's2', 's3'] as const)
 
 // ── §3-3 이미지 패널 — mat.image 슬롯 탭으로 열린다. 작업 면 왼쪽 끝을 덮는다
 export const PANEL: Rect = { x: 160, y: 48, w: 200, h: 836 }
 export const PANEL_IMG = { w: 150, h: 100 } as const
-export const PANEL_ABSENT = 100
+/** 「여기 없다」 칸 — 다른 장과 같은 3:2 (PI-018 #1 · 09.30). 빈 사각형 + 커서 깜빡임(빈 면 슬롯과 같은 그림) */
+export const PANEL_ABSENT = { w: PANEL_IMG.w, h: PANEL_IMG.h } as const
 export const PANEL_GAP = 24
 
 /** 소리 목록 — mat.sound 슬롯 탭으로 열린다. 이미지 패널과 같은 자리 · 같은 크기의 칸. absent 없음 (V1.0 §2-2는 이미지 패널에만 둔다) */
@@ -55,14 +57,14 @@ export function soundRects(sounds: readonly string[]): SlotRect[] {
 
 /** 5장(셔플 순서) + absent. 세로 간격 24, 합 720을 세로 중앙에 */
 export function panelRects(panel: readonly string[]): SlotRect[] {
-  const total = panel.length * PANEL_IMG.h + PANEL_ABSENT + panel.length * PANEL_GAP
+  const total = panel.length * PANEL_IMG.h + PANEL_ABSENT.h + panel.length * PANEL_GAP
   let y = PANEL.y + Math.floor((PANEL.h - total) / 2)
   const out: SlotRect[] = []
   for (const name of panel) {
     out.push({ name: `panel:${name}`, rect: { x: PANEL.x + (PANEL.w - PANEL_IMG.w) / 2, y, w: PANEL_IMG.w, h: PANEL_IMG.h } })
     y += PANEL_IMG.h + PANEL_GAP
   }
-  out.push({ name: 'panel:absent', rect: { x: PANEL.x + (PANEL.w - PANEL_ABSENT) / 2, y, w: PANEL_ABSENT, h: PANEL_ABSENT } })
+  out.push({ name: 'panel:absent', rect: { x: PANEL.x + (PANEL.w - PANEL_ABSENT.w) / 2, y, w: PANEL_ABSENT.w, h: PANEL_ABSENT.h } })
   return out
 }
 
@@ -137,8 +139,8 @@ export function noteHandleRects(r: Rect): { l: Rect; r: Rect } {
   }
 }
 
-// ── §3-3 캔버스 목록 — 60 × 40 축소판, 2열 × 5행, 간격 8
-export const LIST: Rect = { x: 16, y: 640, w: 128, h: 244 }
+// ── §3-3 캔버스 목록 — 60 × 40 축소판, 2열 × 6행, 간격 8. 첫 칸은 지금 캔버스(테두리), 그 뒤가 목록 (PI-018 #5)
+export const LIST: Rect = { x: 16, y: 596, w: 128, h: 280 }
 export const THUMB = { w: 60, h: 40 } as const
 export const THUMB_GAP = 8
 
@@ -207,7 +209,7 @@ export interface SlotRect { name: string; rect: Rect }
 /** 하단 9 + 서랍 3의 사각형. name은 target 표기(`mark` · `gen.rule` · `mat.image`) */
 export function slotRects(slots: Slots): SlotRect[] {
   const out: SlotRect[] = []
-  const xs = [...BOTTOM_LEFT_X, ...BOTTOM_RIGHT_X]
+  const xs = [...BOTTOM_FN_X, ...BOTTOM_SESSION_X]
   slots.bottom.forEach((name, i) => {
     const x = xs[i]
     if (x !== undefined) out.push({ name, rect: { x, y: SLOT_Y, w: SLOT, h: SLOT } })

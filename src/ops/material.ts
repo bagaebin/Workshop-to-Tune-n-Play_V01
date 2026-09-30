@@ -6,7 +6,7 @@
  * mat.blank  탭 = 적기
  * 재료는 빌드에 번들된다 — 서비스 워커가 함께 프리캐시한다.
  */
-import { L, IMG_DEFAULT, VEL_FIXED, TONE_FIXED } from '../constants'
+import { L, IMG_DEFAULT, VEL_FIXED, TONE_FIXED, SOUND_SET } from '../constants'
 import { onOfX, pitchOfY, clamp, SURFACE } from '../layout'
 import { nextId, type Canvas, type Image, type Note, type State, type Vals } from '../model'
 import * as audio from '../audio'
@@ -15,17 +15,23 @@ import * as scope from './scope'
 import s1 from '../../materials/sound/s1.json'
 import s2 from '../../materials/sound/s2.json'
 import s3 from '../../materials/sound/s3.json'
+import s4 from '../../materials/sound/s4.json'
+import s5 from '../../materials/sound/s5.json'
 
 /**
- * 소리 재료 — materials/sound/s1..s3.json (볼트 2026-09-29_sound_material의 S1 · S2 · G4, 값 그대로).
+ * 소리 재료 — materials/sound/s1..s5.json (볼트 2026-09-29_sound_material의 S1 · S2 · G4 · N1 · N2, 값 그대로). SOUND_SET이 3이면 s1–s3만 (R-015).
  * on은 첫 이벤트 0 기준 상대 ms · pitch는 0.5 + 반음/48 이라 첫 음과의 음정만 의미가 있다 · vel·tone 0.5 고정.
  * 이름(s1..s3)은 로그에만 남는다. 화면에는 글자가 없다.
  */
-export const SOUNDS: ReadonlyMap<string, readonly Vals[]> = new Map([
+const ALL_SOUNDS: Array<[string, readonly Vals[]]> = [
   ['s1', (s1 as { vals: Vals[] }).vals],
   ['s2', (s2 as { vals: Vals[] }).vals],
   ['s3', (s3 as { vals: Vals[] }).vals],
-])
+  ['s4', (s4 as { vals: Vals[] }).vals],
+  ['s5', (s5 as { vals: Vals[] }).vals],
+]
+export const SOUNDS: ReadonlyMap<string, readonly Vals[]> = new Map(ALL_SOUNDS.slice(0, SOUND_SET))
+export const SOUND_SET_LABEL = `s1-s${SOUND_SET}`
 
 const imageUrls = import.meta.glob('../../materials/img/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
@@ -72,7 +78,7 @@ export function peekSound(id: string): void {
   if (!vals) return
   const now = audio.currentTime()
   for (const v of vals) audio.play(v, now + v.on / 1000)
-  log.log('mat.peek', { mat: 'sound', id, dur: soundDuration(id) }, 'sound')
+  log.log('mat.peek', { mat: 'sound', id, material_id: id, dur: soundDuration(id) }, 'sound')
 }
 
 export function peekImage(): void {
@@ -108,11 +114,11 @@ export function adoptSound(cv: Canvas, state: State, id: string, x: number, y: n
   if (cv.mat !== 'sound') {
     cv.mat = 'sound'
     state.mat = 'sound'
-    log.log('mat.adopt', { mat: 'sound', id, x: Math.round(x), y: Math.round(y) }, 'sound')
+    log.log('mat.adopt', { mat: 'sound', id, material_id: id, x: Math.round(x), y: Math.round(y) }, 'sound')
   }
   cv.notes.push(...placed)
   const vals = placed.map(({ on, pitch, len, vel, tone }) => ({ on, pitch, len, vel, tone }))
-  log.log('note.add', { ids: placed.map((n) => n.id), count: placed.length, src: 'material', sound: id, vals, scope: placed.length === 1 ? 'one' : 'many', truncated: truncated || undefined }, 'sound')
+  log.log('note.add', { ids: placed.map((n) => n.id), count: placed.length, src: 'material', sound: id, material_id: id, vals, scope: placed.length === 1 ? 'one' : 'many', truncated: truncated || undefined }, 'sound')
   // 놓은 열이 선택 — 바로 옮기거나 버릴 수 있다. 놓는 즉시 1회 들린다
   cv.selection = new Set(placed.map((n) => n.id))
   cv.allOn = false

@@ -73,6 +73,8 @@ export interface View {
   pressed: ReadonlySet<string>
   /** 기능 소개 — 밝힐 자리. 나머지는 어둡게 (D15 안 2 ③) */
   spotlight: readonly Rect[] | null
+  /** 멈춘 화면(구간 2 전) — 전체를 흐리게 (PI-017 안 D) */
+  dim: boolean
 }
 
 const C = {
@@ -146,6 +148,7 @@ export function draw(ctx: CanvasRenderingContext2D, fit: Fit, v: View): void {
     if (v.panelOpen === 'image') drawPanel(ctx, v)
     if (v.panelOpen === 'sound') drawSoundPanel(ctx, v)
     if (v.spotlight) drawSpotlight(ctx, v.spotlight)
+    if (v.dim) fillRect(ctx, { x: 0, y: 0, w: W, h: H }, 'rgba(0,0,0,0.55)')
     if (v.ghost) drawGhost(ctx, v.ghost)
     ctx.globalAlpha = 1
   }
@@ -346,8 +349,9 @@ function drawList(ctx: CanvasRenderingContext2D, v: View): void {
   v.list.forEach((t, i) => {
     const r = listRect(i)
     fillRect(ctx, r, C.thumb)
-    ctx.strokeStyle = C.thumbLine
-    ctx.lineWidth = 1
+    // 첫 칸 = 지금 캔버스 — 흰 테두리로 구분 (PI-018 #5). 그 뒤가 남겨 둔 것들
+    ctx.strokeStyle = i === 0 ? 'rgba(255,255,255,0.9)' : C.thumbLine
+    ctx.lineWidth = i === 0 ? 2 : 1
     ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
     ctx.save()
     ctx.beginPath()
@@ -405,11 +409,12 @@ function drawPanel(ctx: CanvasRenderingContext2D, v: View): void {
   ctx.strokeRect(PANEL.x + 0.5, PANEL.y + 0.5, PANEL.w - 1, PANEL.h - 1)
   for (const p of panelRects(v.slots.panel)) {
     if (p.name === 'panel:absent') {
-      ctx.setLineDash([6, 6])
-      ctx.strokeStyle = '#666'
+      // 「여기 없다」 — 다른 장과 같은 3:2 빈 사각형에 빈 면 슬롯과 같은 커서 깜빡임. 글자 · 아이콘 없음 (PI-018 #1)
+      fillRect(ctx, p.rect, C.slotFill)
+      ctx.strokeStyle = C.slotLine
       ctx.lineWidth = 2
       ctx.strokeRect(p.rect.x + 1, p.rect.y + 1, p.rect.w - 2, p.rect.h - 2)
-      ctx.setLineDash([])
+      if (Math.floor(v.previewPhase * 6) % 2 === 0) fillRect(ctx, { x: p.rect.x + p.rect.w * 0.3, y: p.rect.y + p.rect.h * 0.3, w: 2, h: p.rect.h * 0.4 }, 'rgba(220,220,220,0.9)')
       continue
     }
     drawImageEl(ctx, v.imageEls.get(p.name.slice(6)), p.rect)

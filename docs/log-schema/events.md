@@ -32,8 +32,8 @@
 | `note.edit` | `ids[]` `count` `scope` `field` `prev[]` `vals[]` | ☐ |
 | `note.remove` | `ids[]` `count` `scope` | ☐ |
 | `scope.set` | `scope` `count` `ids[]` | ☐ |
-| `mat.peek` | `mat` · 소리 목록의 칸을 들으면 `id` `dur` | ✔ |
-| `mat.adopt` | `mat` `x` `y` · 소리는 `id` | ✔ |
+| `mat.peek` | `mat` · 소리 목록의 칸을 들으면 `id` `material_id` `dur` | ✔ |
+| `mat.adopt` | `mat` `x` `y` · 소리는 `id` `material_id` | ✔ |
 | `grid.on` `grid.off` | `by` (`user`\|`lock`) | ☐ |
 | `gen.set` | `gen` `by` | ☐ |
 | `rule.param` | `name` `value` | ☐ |
@@ -73,7 +73,8 @@
 
 ## V1.0에서 필드가 늘어난 것
 
-- `note.add src:material` — `sound`(s1..s3)
+- `note.add src:material` — `sound` · `material_id`(s1..s5)
+- 헤더 — `sound_set`(`s1-s5`|`s1-s3`) · `bottom_layout`(`session-left`|`session-right`, 09.30) — chain.py가 슬롯 좌표를 이것으로 가른다
 - `note.edit field:len` — `edge` (`l`\|`r`). 왼쪽이면 `on`도 바뀐다
 - `image.size` — `corner` (`nw`\|`ne`\|`sw`\|`se`)
 - `canvas.new` — `reason:'seg1'`은 화면 비우기(목록 · 칩 · 상태까지)

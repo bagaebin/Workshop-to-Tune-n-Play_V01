@@ -2,7 +2,7 @@
 
 | 재료 | 파일 | 형식 | 상태 |
 | --- | --- | --- | --- |
-| 소리 | `sound/s1.json` `s2.json` `s3.json` | `{ "vals": [ {on, pitch, len, vel, tone} × 6 ] }` · `on`은 0부터 상대값(ms) · `pitch = 0.5 + 반음/48`(첫 음과의 음정만 의미) · `vel·tone` 0.5 | **실물 셋** (09.29) — 볼트 `2026-09-29_sound_material`의 `sound_S1` · `sound_S2` · `sound_G4`를 값 그대로. `s1`은 이전 `sound.json`과 같다. 소리 목록에 셋이 셔플된 순서로 나온다(헤더 `slots_sounds`) |
+| 소리 | `sound/s1.json` … `s5.json` | `{ "vals": [ {on, pitch, len, vel, tone} × 6 ] }` · `on`은 0부터 상대값(ms) · `pitch = 0.5 + 반음/48`(첫 음과의 음정만 의미) · `vel·tone` 0.5 | **실물 다섯** (09.30) — 볼트 `2026-09-29_sound_material`의 `sound_S1` · `sound_S2` · `sound_G4` · `sound_N1` · `sound_N2`를 값 그대로(s1 … s5). `SOUND_SET`이 3이면 s1–s3만. 소리 목록에 셔플된 순서로(헤더 `slots_sounds` · `sound_set`) |
 | 이미지 | `img/i1.png` … `img/i5.png` | 1200 × 800 px (3:2) · 실물도 같은 파일명·규격 | **실물** (09.29 · T11 이미지 완료) — 사진 5장, 원본 그대로(리사이즈·재압축 없음) · RGB PNG · 장당 1.3–2.2 MB |
 
 - 실물 교체 기한 **09.25 저녁 (T11)**. 실물도 같은 파일명·같은 JSON이라 코드 변경 없음
